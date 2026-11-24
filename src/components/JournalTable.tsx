@@ -168,6 +168,22 @@ export function JournalTable({
     return row.progress.byType[current.type].finalPercent;
   };
 
+  const typeValues = students
+    .map(typeFinal)
+    .filter((value): value is number => value != null);
+  const typeAverage = typeValues.length
+    ? typeValues.reduce((sum, value) => sum + value, 0) / typeValues.length
+    : null;
+  const typeBand = gradeBand(typeAverage);
+  const typeTone =
+    current.type === 'lecture'
+      ? typeAverage != null && typeAverage >= subject.passThreshold
+        ? GRADE_CLASSES.grade5
+        : GRADE_CLASSES.grade2
+      : typeBand
+        ? GRADE_CLASSES[typeBand.tone]
+        : null;
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-faint">
@@ -212,16 +228,29 @@ export function JournalTable({
       </div>
 
       <div className="mt-2 flex items-baseline justify-between gap-3 text-[11px] text-faint">
-        <span className="hidden sm:inline">Явка — сверху, балл — снизу</span>
-        <span className="sm:hidden">Прокрутите вбок →</span>
-        <span>
-          {countLabel(
-            current.activities.reduce((sum, activity) => sum + activity.sessions.length, 0),
-            'сессия',
-            'сессии',
-            'сессий',
-          )}
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          <span>
+            {countLabel(
+              current.activities.reduce((sum, activity) => sum + activity.sessions.length, 0),
+              'сессия',
+              'сессии',
+              'сессий',
+            )}
+          </span>
+          {typeAverage != null ? (
+            <>
+              <span className="text-faint/50">·</span>
+              <span className={`tnum font-medium ${typeTone?.text ?? 'text-dim'}`}>
+                {current.type === 'lecture' ? 'посещаемость' : 'средний'} {formatPercent(typeAverage)}
+              </span>
+              {current.type !== 'lecture' && typeBand ? (
+                <span className={`tnum font-semibold ${typeTone?.text}`}>{typeBand.grade}</span>
+              ) : null}
+            </>
+          ) : null}
         </span>
+        <span className="hidden shrink-0 sm:inline">Явка слева, балл справа</span>
+        <span className="shrink-0 sm:hidden">вбок →</span>
       </div>
 
       <div className="mt-1.5 max-h-[calc(100dvh-370px)] overflow-auto rounded-card border border-line bg-surface lg:max-h-[calc(100dvh-350px)]">
@@ -248,7 +277,7 @@ export function JournalTable({
               ))}
               <th
                 rowSpan={2}
-                className="sticky top-0 z-20 min-w-[64px] border-b border-line bg-elevated px-2 py-2 text-center font-medium text-dim"
+                className="sticky top-0 z-20 min-w-[72px] border-b border-line bg-elevated px-2 py-2 text-center font-medium text-dim"
               >
                 Итог
               </th>
@@ -262,7 +291,7 @@ export function JournalTable({
                     <th
                       key={column.session.id}
                       title={`${TYPE_LABEL[current.type].one} · ${column.subgroupName ?? 'вся группа'}`}
-                      className={`sticky top-9 z-20 min-w-[64px] border-b border-line px-1 py-1.5 text-center align-middle font-normal ${
+                      className={`sticky top-9 z-20 min-w-[72px] border-b border-line px-1 py-1.5 text-center align-middle font-normal ${
                         column.subgroupName ? tone.cell : 'bg-elevated'
                       } ${lastInActivity ? 'border-r' : ''}`}
                     >
@@ -286,7 +315,7 @@ export function JournalTable({
                   <th
                     scope="row"
                     title={row.subgroupName ?? 'вся группа'}
-                    className={`sticky left-0 z-10 h-14 border-b border-r border-line px-2 text-left font-normal ${
+                    className={`sticky left-0 z-10 h-12 border-b border-r border-line px-2 text-left font-normal ${
                       row.subgroupIndex ? tone.cell : 'bg-surface'
                     }`}
                   >
@@ -313,7 +342,7 @@ export function JournalTable({
                       return (
                         <td
                           key={column.session.id}
-                          className={`h-14 border-b border-line p-0 ${
+                          className={`h-12 border-b border-line p-0 ${
                             applies
                               ? row.subgroupIndex
                                 ? tone.cell
@@ -329,14 +358,14 @@ export function JournalTable({
                               student={row.student}
                             />
                           ) : (
-                            <span className="block h-14" />
+                            <span className="block h-12" />
                           )}
                         </td>
                       );
                     }),
                   )}
 
-                  <td className="h-10 border-b border-line px-1 py-0 text-center">
+                  <td className="h-12 border-b border-line px-1 py-0 text-center">
                     <span className="inline-flex items-baseline justify-center gap-1">
                       <span
                         className={`tnum text-[12px] font-semibold ${
@@ -484,7 +513,7 @@ function Cell({
         type="button"
         onClick={() => void toggleAttendance()}
         aria-label={`Явка: ${student.name}, ${column.session.date}`}
-        className="flex h-14 w-full flex-col items-center justify-center gap-1 transition-colors hover:bg-elevated/30 focus-ring"
+        className="flex h-12 w-full items-center justify-center gap-1 px-1 transition-colors hover:bg-elevated/30 focus-ring"
       >
         <span
           className={`flex h-5 w-5 items-center justify-center rounded-full ${
@@ -505,7 +534,7 @@ function Cell({
             present === true ? 'text-moss' : present === false ? 'text-danger' : 'text-faint'
           }`}
         >
-          {present === true ? 'был' : present === false ? 'не был' : '—'}
+          {present === true ? 'был' : present === false ? 'нет' : '—'}
         </span>
       </button>
     );
@@ -515,15 +544,15 @@ function Cell({
   const bandTone = band ? GRADE_CLASSES[band.tone] : null;
 
   return (
-    <div className="flex h-14 w-full flex-col">
+    <div className="flex h-12 w-full">
       <button
         type="button"
         onClick={() => void toggleAttendance()}
         aria-label={`Посещаемость: ${student.name}, ${column.session.date}`}
-        className="flex h-7 w-full items-center justify-center gap-1 transition-colors hover:bg-elevated/30 focus-ring"
+        className="flex w-[30px] shrink-0 items-center justify-center border-r border-line/50 transition-colors hover:bg-elevated/30 focus-ring"
       >
         <span
-          className={`flex h-4 w-4 items-center justify-center rounded-full ${
+          className={`flex h-5 w-5 items-center justify-center rounded-full ${
             present === true
               ? 'bg-moss text-surface'
               : present === false
@@ -533,20 +562,11 @@ function Cell({
         >
           <Icon
             name={present === true ? 'check' : present === false ? 'close' : 'clock'}
-            size={9}
+            size={11}
           />
         </span>
-        {present === true || present === false ? (
-          <span
-            className={`text-[8.5px] font-medium ${
-              present === true ? 'text-moss' : 'text-danger'
-            }`}
-          >
-            {present === true ? 'был' : 'нет'}
-          </span>
-        ) : null}
       </button>
-      <div className="flex flex-1 items-center justify-center border-t border-line/50">
+      <div className="flex min-w-0 flex-1 items-center justify-center">
         <input
           value={value}
           onChange={(event) => setValue(event.target.value)}
@@ -557,12 +577,12 @@ function Cell({
           inputMode="decimal"
           placeholder="—"
           aria-label={`Балл: ${student.name}, ${column.session.date}`}
-          className={`tnum h-7 w-8 border-0 bg-transparent p-0 text-center text-[12.5px] placeholder:text-faint focus:bg-elevated/70 focus:outline-none ${
+          className={`tnum h-9 w-8 border-0 bg-transparent p-0 text-center text-[12.5px] placeholder:text-faint focus:bg-elevated/70 focus:outline-none ${
             bandTone ? bandTone.text : 'text-ink'
           }`}
         />
         <span
-          className={`tnum w-3 shrink-0 text-[9px] font-semibold ${
+          className={`tnum w-2.5 shrink-0 text-[9px] font-semibold ${
             bandTone?.text ?? 'text-transparent'
           }`}
         >
