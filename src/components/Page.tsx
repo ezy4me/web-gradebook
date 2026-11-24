@@ -30,7 +30,7 @@ export function Page({
   return (
     <div className="min-h-full">
       <header className="safe-top sticky top-0 z-20 border-b border-line bg-bg">
-        <div className="mx-auto flex min-h-[58px] w-full max-w-app items-center gap-1.5 px-3 py-2.5">
+        <div className="mx-auto flex min-h-[58px] w-full max-w-app items-center gap-1.5 px-3 py-2.5 lg:px-6">
           {back ? (
             <IconButton
               icon="back"
@@ -54,9 +54,9 @@ export function Page({
           </div>
           {actions ? <div className="flex shrink-0 items-center gap-0.5">{actions}</div> : null}
         </div>
-        {below ? <div className="mx-auto w-full max-w-app px-5 pb-0">{below}</div> : null}
+        {below ? <div className="mx-auto w-full max-w-app px-5 pb-0 lg:px-8">{below}</div> : null}
       </header>
-      <div className={`mx-auto w-full max-w-app ${padded ? 'px-5 py-5' : ''}`}>{children}</div>
+      <div className={`mx-auto w-full max-w-app ${padded ? 'px-5 py-5 lg:px-8' : ''}`}>{children}</div>
     </div>
   );
 }

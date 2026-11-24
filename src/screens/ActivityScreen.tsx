@@ -96,7 +96,7 @@ export function ActivityScreen() {
       actions={<IconButton icon="settings" label="Настройки занятия" onClick={() => setSettingsOpen(true)} />}
       padded={false}
     >
-      <div className="mx-auto w-full max-w-app px-5 pt-4">
+      <div className="mx-auto w-full max-w-app px-5 pt-4 lg:px-8">
         <div className="flex items-end justify-between border-b border-line pb-3">
           <div>
             <p className="text-[12px] text-faint">

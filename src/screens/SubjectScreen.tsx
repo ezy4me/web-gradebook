@@ -18,6 +18,7 @@ import {
   useToast,
 } from '../components/ui';
 import { Icon } from '../components/icons';
+import { JournalTable } from '../components/JournalTable';
 import { useSnapshot } from '../db/hooks';
 import {
   createStudent,
@@ -60,7 +61,7 @@ import {
 } from '../db/types';
 import { ActivityFormSheet } from './ActivityFormSheet';
 
-type Tab = 'journal' | 'students' | 'overview';
+type Tab = 'journal' | 'table' | 'students' | 'overview';
 
 const TYPE_TONE: Record<ActivityType, string> = {
   lecture: 'bg-steel',
@@ -140,7 +141,7 @@ export function SubjectScreen() {
       actions={<IconButton icon="settings" label="Настройки предмета" onClick={() => setSettingsOpen(true)} />}
       padded={false}
     >
-      <div className="mx-auto w-full max-w-app px-5 pt-3">
+      <div className="mx-auto w-full max-w-app px-5 pt-3 lg:px-8">
         <div className="scroll-x -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {groups.map((group) => {
             const active = group.id === (activeGroup?.id ?? '');
@@ -180,6 +181,7 @@ export function SubjectScreen() {
             onChange={setTab}
             options={[
               { value: 'journal', label: 'Журнал' },
+              { value: 'table', label: 'Таблица' },
               { value: 'students', label: 'Студенты' },
               { value: 'overview', label: 'Сводка' },
             ]}
@@ -187,7 +189,7 @@ export function SubjectScreen() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-app px-5 pb-6 pt-5">
+      <div className="mx-auto w-full max-w-app px-5 pb-6 pt-5 lg:px-8">
         {tab === 'journal' ? (
           <JournalTab
             subject={subject}
@@ -196,6 +198,9 @@ export function SubjectScreen() {
             onAdd={() => setCreatingActivity(true)}
             onAddGroup={() => setGroupSheet(true)}
           />
+        ) : null}
+        {tab === 'table' ? (
+          <JournalTable subject={subject} snapshot={snapshot} groupId={activeGroup?.id ?? ''} />
         ) : null}
         {tab === 'students' ? (
           <StudentsTab

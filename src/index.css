@@ -269,3 +269,10 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+@media (min-width: 1024px) {
+  :root {
+    --container-app: 980px;
+  }
+}
+

@@ -466,7 +466,7 @@ export function Sheet({
         onClick={onClose}
         className="absolute inset-0 bg-ink/45 fade-in"
       />
-      <div className="sheet-in relative flex max-h-[92vh] w-full max-w-app flex-col overscroll-contain rounded-t-sheet border border-line bg-surface shadow-sheet safe-bottom">
+      <div className="sheet-in relative flex max-h-[92vh] w-full max-w-[560px] flex-col overscroll-contain rounded-t-sheet border border-line bg-surface shadow-sheet safe-bottom">
         <div className="px-5 pb-4 pt-2.5">
           <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line-strong" />
           <div className="flex items-start gap-3">
@@ -583,7 +583,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           {items.map((item) => (
             <div
               key={item.id}
-              className={`fade-in pointer-events-auto flex max-w-app items-center gap-3 rounded-full py-2.5 pl-4 pr-2 text-[12.5px] font-medium shadow-fab ${
+              className={`fade-in pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-full py-2.5 pl-4 pr-2 text-[12.5px] font-medium shadow-fab ${
                 item.tone === 'danger' ? 'bg-danger text-surface' : 'bg-ink text-surface'
               }`}
               role="status"

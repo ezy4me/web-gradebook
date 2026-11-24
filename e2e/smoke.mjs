@@ -97,6 +97,18 @@ try {
   check('даты у занятий', (await page.getByText(/пт, 23 окт/).count()) >= 1);
   await shot('02-journal');
 
+  await page.getByRole('tab', { name: 'Таблица' }).click();
+  await page.waitForTimeout(700);
+  check('таблица: студенты и занятия', (await page.locator('tbody tr').count()) >= 10);
+  check('таблица: колонки с датами', (await page.locator('thead th').count()) >= 4);
+  const tableInput = page.locator('input[aria-label^="Балл:"]').first();
+  await tableInput.fill('77');
+  await tableInput.blur();
+  await page.waitForTimeout(700);
+  check('таблица: балл сохраняется', (await tableInput.inputValue()) === '77');
+  check('таблица: явка в клетке', (await page.locator('button[aria-label^="Посещаемость:"]').count()) > 0);
+  await shot('02b-table');
+
   await page.getByRole('tab', { name: 'Студенты' }).click();
   await page.waitForTimeout(600);
   check('список студентов', (await page.getByText(/22 студент/).count()) >= 1);
@@ -274,10 +286,14 @@ try {
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto(`${BASE}#/`);
   await page.waitForTimeout(800);
+  await page.getByRole('button').filter({ hasText: 'Веб-разработка' }).first().click();
+  await page.waitForTimeout(600);
+  await page.getByRole('tab', { name: 'Таблица' }).click();
+  await page.waitForTimeout(500);
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
-  check('нет горизонтального скролла на 320px', overflow <= 0, `overflow=${overflow}`);
+  check('таблица на 320 без скролла страницы', overflow <= 0, `overflow=${overflow}`);
 } catch (error) {
   failures.push(`исключение: ${error.message}`);
   await shot('FAIL');
