@@ -12,6 +12,8 @@ function defaults(): AppSettings {
     pinSalt: null,
     autoLockMinutes: 5,
     shortSubjectNames: false,
+    autoSnapshot: true,
+    snapshotHours: 24,
     lastSubjectId: null,
     updatedAt: nowIso(),
   };

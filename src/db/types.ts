@@ -161,6 +161,10 @@ export interface AppSettings {
   autoLockMinutes: number;
   /** Показывать названия предметов инициалами: «Веб-разработка» → «ВР». */
   shortSubjectNames: boolean;
+  /** Автоматические локальные снимки базы. */
+  autoSnapshot: boolean;
+  /** Интервал автоматических снимков, часы. */
+  snapshotHours: number;
   lastSubjectId: ID | null;
   updatedAt: string;
 }
@@ -172,9 +176,20 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pinSalt: null,
   autoLockMinutes: 5,
   shortSubjectNames: false,
+  autoSnapshot: true,
+  snapshotHours: 24,
   lastSubjectId: null,
   updatedAt: new Date().toISOString(),
 };
+
+/** Локальный снимок базы: хранится только на устройстве, в облако не уезжает. */
+export interface LocalSnapshot {
+  id: ID;
+  createdAt: string;
+  reason: 'auto' | 'manual' | 'before-import' | 'before-wipe';
+  bytes: number;
+  backup: BackupFile;
+}
 
 export const DEFAULT_TYPE_WEIGHTS: Record<ActivityType, number> = {
   lecture: 0,

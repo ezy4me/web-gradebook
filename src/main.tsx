@@ -2,9 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { applyTheme, getSettings } from './lib/settings';
+import { initSnapshotScheduler } from './db/snapshots';
 import './index.css';
 
 applyTheme(getSettings().theme);
+initSnapshotScheduler();
 // Облачные модули — отдельными чанками и только при наличии ключей:
 // офлайн-ядро не должно тяжелеть из-за Supabase/Google.
 if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {

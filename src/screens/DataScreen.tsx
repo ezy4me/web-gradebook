@@ -6,12 +6,15 @@ import {
   ConfirmSheet,
   Field,
   FullPageLoader,
+  IconButton,
   Input,
   Progress,
   Row,
   SectionTitle,
   Segmented,
+  Select,
   Sheet,
+  Switch,
   Textarea,
   useToast,
 } from '../components/ui';
@@ -27,6 +30,17 @@ import {
 } from '../db/backup';
 import { wipeDatabase } from '../db/db';
 import { seedDemoData } from '../db/seed';
+import {
+  createSnapshot,
+  deleteSnapshot,
+  downloadSnapshot,
+  listSnapshots,
+  maybeCreateAutoSnapshot,
+  restoreSnapshot,
+  SNAPSHOT_REASON_LABEL,
+} from '../db/snapshots';
+import { updateSettings, useSettings } from '../lib/settings';
+import type { LocalSnapshot } from '../db/types';
 import { downloadJournalXlsx, excelSummaryLabel } from '../domain/excel';
 import { SyncSheet } from '../components/SyncSheet';
 import { DriveSheet } from '../components/DriveSheet';
@@ -66,11 +80,19 @@ export function DataScreen() {
   const [driveOpen, setDriveOpen] = useState(false);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [storageBusy, setStorageBusy] = useState(false);
+  const [snapshots, setSnapshots] = useState<LocalSnapshot[]>([]);
+  const [snapshotBusy, setSnapshotBusy] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<LocalSnapshot | null>(null);
   const sync = useSyncState();
   const drive = useDriveState();
+  const settings = useSettings();
 
   useEffect(() => {
     void getStorageInfo().then(setStorage);
+    void maybeCreateAutoSnapshot()
+      .catch(() => null)
+      .then(() => listSnapshots())
+      .then(setSnapshots);
   }, []);
   const [confirmWipe, setConfirmWipe] = useState(false);
   const [schedule, setSchedule] = useState<{ text: string; name: string } | null>(null);
@@ -102,6 +124,8 @@ export function DataScreen() {
       attendance: active(snapshot.attendance),
     };
   }, [snapshot]);
+
+  const refreshSnapshots = async () => setSnapshots(await listSnapshots());
 
   if (!snapshot) {
     return (
@@ -263,6 +287,112 @@ export function DataScreen() {
             {storageBusy ? 'Запрашиваем…' : 'Защитить от очистки'}
           </Button>
         ) : null}
+      </div>
+
+      <SectionTitle
+        action={
+          <button
+            type="button"
+            disabled={snapshotBusy}
+            onClick={async () => {
+              setSnapshotBusy(true);
+              try {
+                await createSnapshot('manual');
+                await refreshSnapshots();
+                toast('Локальная копия создана');
+              } catch {
+                toast('Не удалось создать копию: возможно, закончилось место', 'danger');
+              } finally {
+                setSnapshotBusy(false);
+              }
+            }}
+            className="text-[12px] text-clay underline-offset-2 hover:underline disabled:opacity-40 focus-ring"
+          >
+            {snapshotBusy ? 'Создаём…' : 'Создать копию'}
+          </button>
+        }
+      >
+        Локальные копии
+      </SectionTitle>
+      <div className="rounded-card border border-line bg-surface">
+        <div className="border-b border-line px-4">
+          <Switch
+            label="Автоматические копии"
+            description="Снимок базы по расписанию. Хранится в браузере, в облако не уезжает."
+            checked={settings.autoSnapshot}
+            onChange={(checked) => updateSettings({ autoSnapshot: checked })}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <span className="text-[13px] text-dim">Как часто</span>
+          <Select
+            value={String(settings.snapshotHours)}
+            onChange={(event) => updateSettings({ snapshotHours: Number(event.target.value) || 24 })}
+            aria-label="Интервал автоматических копий"
+            className="h-10 w-[130px]"
+          >
+            <option value="6">каждые 6 часов</option>
+            <option value="12">каждые 12 часов</option>
+            <option value="24">раз в сутки</option>
+            <option value="72">раз в 3 дня</option>
+            <option value="168">раз в неделю</option>
+          </Select>
+        </div>
+
+        {snapshots.length ? (
+          <div className="divide-y divide-line">
+            {snapshots.slice(0, 5).map((item) => (
+              <div key={item.id} className="flex items-center gap-2 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] text-ink">
+                    {new Date(item.createdAt).toLocaleString('ru-RU', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                  <p className="mt-0.5 text-[11.5px] text-faint">
+                    {SNAPSHOT_REASON_LABEL[item.reason]} · {formatBytes(item.bytes)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 text-[12px] text-clay underline-offset-2 hover:underline focus-ring"
+                  onClick={() => setRestoreTarget(item)}
+                >
+                  Восстановить
+                </button>
+                <IconButton
+                  icon="download"
+                  label="Скачать копию"
+                  size={17}
+                  onClick={() => downloadSnapshot(item)}
+                />
+                <IconButton
+                  icon="trash"
+                  label="Удалить копию"
+                  size={17}
+                  onClick={async () => {
+                    await deleteSnapshot(item.id);
+                    await refreshSnapshots();
+                    toast('Копия удалена');
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="px-4 py-4 text-[12.5px] leading-relaxed text-faint">
+            Пока нет копий. Первая появится автоматически, когда в журнале будут данные, или
+            создайте её вручную.
+          </p>
+        )}
+
+        <p className="border-t border-line px-4 py-3 text-[11.5px] leading-relaxed text-faint">
+          Копии защищают от случайных правок и неудачного импорта. Если устройство потеряется,
+          понадобится JSON-файл или Google Drive — браузерные копии останутся на нём.
+        </p>
       </div>
 
       <SectionTitle>Перенос данных</SectionTitle>
@@ -500,6 +630,37 @@ export function DataScreen() {
         </button>
       </div>
 
+      <ConfirmSheet
+        open={Boolean(restoreTarget)}
+        title="Восстановить локальную копию?"
+        description={
+          restoreTarget
+            ? `База вернётся к состоянию ${new Date(restoreTarget.createdAt).toLocaleString('ru-RU', {
+                day: 'numeric',
+                month: 'long',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}. Текущее состояние сначала сохранится отдельной копией.`
+            : undefined
+        }
+        confirmLabel={snapshotBusy ? 'Восстанавливаем…' : 'Восстановить'}
+        onCancel={() => setRestoreTarget(null)}
+        onConfirm={async () => {
+          if (!restoreTarget || snapshotBusy) return;
+          setSnapshotBusy(true);
+          try {
+            const { result } = await restoreSnapshot(restoreTarget.id);
+            toast(`Восстановлено: добавлено ${result.added}, обновлено ${result.updated}`);
+            setRestoreTarget(null);
+            await refreshSnapshots();
+          } catch {
+            toast('Не удалось восстановить копию', 'danger');
+          } finally {
+            setSnapshotBusy(false);
+          }
+        }}
+      />
+
       <SyncSheet open={syncOpen} onClose={() => setSyncOpen(false)} />
       <DriveSheet open={driveOpen} onClose={() => setDriveOpen(false)} />
 
@@ -510,8 +671,10 @@ export function DataScreen() {
         confirmLabel="Очистить базу"
         onCancel={() => setConfirmWipe(false)}
         onConfirm={async () => {
+          await createSnapshot('before-wipe');
           await wipeDatabase();
           setConfirmWipe(false);
+          await refreshSnapshots();
           toast('Локальная база очищена');
         }}
       />
@@ -788,7 +951,9 @@ export function DataScreen() {
               if (!pending) return;
               setImporting(true);
               try {
+                await createSnapshot('before-import');
                 const result = await importBackup(pending.backup, mode);
+                await refreshSnapshots();
                 toast(
                   `Импорт: добавлено ${result.added}, обновлено ${result.updated}, пропущено ${result.skipped}`,
                 );

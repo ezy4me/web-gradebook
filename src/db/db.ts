@@ -7,6 +7,7 @@ import type {
   Grade,
   Group,
   GroupMember,
+  LocalSnapshot,
   Student,
   Subject,
   Subgroup,
@@ -30,6 +31,7 @@ export class GradebookDB extends Dexie {
   sessions!: Table<ActivitySession, string>;
   grades!: Table<Grade, string>;
   attendance!: Table<Attendance, string>;
+  snapshots!: Table<LocalSnapshot, string>;
 
   constructor() {
     super('web-gradebook');
@@ -70,6 +72,11 @@ export class GradebookDB extends Dexie {
         }
         if (rows.length) await tx.table('groupMembers').bulkAdd(rows);
       });
+
+    // v3: локальные снимки базы — только на устройстве, не синхронизируются.
+    this.version(3).stores({
+      snapshots: 'id, createdAt, reason',
+    });
 
     // Любая точечная запись помечает стор грязным для Supabase/Drive.
     for (const store of STORE_ORDER) {

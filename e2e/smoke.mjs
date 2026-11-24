@@ -217,6 +217,7 @@ try {
   await page.goto(`${BASE}#/data`);
   await page.waitForTimeout(700);
   check('данные: состояние хранилища', (await page.getByText('Хранилище', { exact: true }).count()) >= 1);
+  check('данные: локальные копии', (await page.getByText('Локальные копии', { exact: true }).count()) >= 1);
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Скачать бэкап JSON' }).click(),
