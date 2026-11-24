@@ -107,6 +107,21 @@ try {
   await page.waitForTimeout(700);
   check('таблица: балл сохраняется', (await tableInput.inputValue()) === '77');
   check('таблица: явка в клетке', (await page.locator('button[aria-label^="Явка:"]').count()) > 0);
+  check(
+    'таблица: явка без подписей',
+    (await page.locator('button[aria-label^="Явка:"]').first().innerText()).trim() === '',
+  );
+  const tableMetrics = await page.evaluate(() => {
+    const table = document.querySelector('table');
+    const wrap = table?.parentElement;
+    const cell = document.querySelector('input[aria-label^="Балл:"]')?.closest('td');
+    return {
+      scrollable: Boolean(wrap && wrap.scrollWidth > wrap.clientWidth),
+      scoreWidth: cell?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  check('таблица: горизонтальный скролл', tableMetrics.scrollable);
+  check('таблица: минимальная ширина балла', tableMetrics.scoreWidth >= 80, `${tableMetrics.scoreWidth}px`);
   check('таблица: виды занятий', (await page.getByRole('tab', { name: 'Практики' }).count()) === 1);
   await shot('02b-table');
   await page.getByRole('tab', { name: 'Лекции' }).click();

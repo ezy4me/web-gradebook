@@ -264,22 +264,8 @@ export function JournalTable({
         <span className="shrink-0 sm:hidden">вбок →</span>
       </div>
 
-      <div className="mt-1.5 max-h-[calc(100dvh-370px)] overflow-auto rounded-card border border-line bg-surface lg:max-h-[calc(100dvh-350px)]">
-        <table className="w-full min-w-[640px] table-fixed border-separate border-spacing-0 text-[12px]">
-          <colgroup>
-            <col style={{ width: '24%' }} />
-            {current.activities.map((activity) =>
-              lecture ? (
-                <col key={`col-${activity.activity.id}`} style={{ width: `${68 / current.activities.length}%` }} />
-              ) : (
-                <Fragment key={`cols-${activity.activity.id}`}>
-                  <col style={{ width: `${(68 / current.activities.length) * 0.32}%` }} />
-                  <col style={{ width: `${(68 / current.activities.length) * 0.68}%` }} />
-                </Fragment>
-              ),
-            )}
-            <col style={{ width: '8%' }} />
-          </colgroup>
+      <div className="mt-1.5 max-h-[calc(100dvh-370px)] overflow-auto overscroll-x-contain rounded-card border border-line bg-surface lg:max-h-[calc(100dvh-350px)]">
+        <table className="w-max min-w-full table-auto border-separate border-spacing-0 text-[12px]">
           <thead>
             <tr>
               <th
@@ -293,7 +279,7 @@ export function JournalTable({
                   key={activity.activity.id}
                   colSpan={activityWidth}
                   title={activity.activity.title}
-                  className={`sticky top-0 z-20 h-9 border-b border-line bg-elevated px-2 py-1 text-center text-[11px] font-medium text-ink ${
+                  className={`sticky top-0 z-20 h-9 min-w-[128px] border-b border-line bg-elevated px-2 py-1 text-center text-[11px] font-medium text-ink ${
                     activityIndex === current.activities.length - 1 ? 'border-r' : ''
                   }`}
                 >
@@ -319,7 +305,7 @@ export function JournalTable({
                   <th
                     key={`dates-${activity.activity.id}`}
                     colSpan={activityWidth}
-                    className={`sticky z-20 h-8 border-b border-line bg-elevated px-1 py-0 text-center align-middle font-normal ${
+                    className={`sticky z-20 h-8 min-w-[128px] border-b border-line bg-elevated px-1 py-0 text-center align-middle font-normal ${
                       activityIndex === current.activities.length - 1 ? 'border-r' : ''
                     }`}
                     style={{ top: `${dateRowOffset}px` }}
@@ -348,7 +334,7 @@ export function JournalTable({
                 const cells = lecture ? (
                   <th
                     key={`label-${activity.activity.id}`}
-                    className={`sticky z-20 h-7 border-b border-line bg-elevated px-1 text-center text-[9px] font-medium uppercase tracking-wide text-faint ${
+                    className={`sticky z-20 h-7 min-w-[96px] border-b border-line bg-elevated px-1 text-center text-[9px] font-medium uppercase tracking-wide text-faint ${
                       last ? 'border-r' : ''
                     }`}
                     style={{ top: `${dateRowOffset + dateRowHeight}px` }}
@@ -364,7 +350,7 @@ export function JournalTable({
                       +/-
                     </th>
                     <th
-                      className={`sticky z-20 h-7 w-16 min-w-16 border-b border-line bg-elevated px-1 text-center text-[9px] font-medium text-faint ${
+                      className={`sticky z-20 h-7 w-16 min-w-[84px] border-b border-line bg-elevated px-1 text-center text-[9px] font-medium text-faint ${
                         last ? 'border-r' : ''
                       }`}
                       style={{ top: `${dateRowOffset + dateRowHeight}px` }}
@@ -412,7 +398,7 @@ export function JournalTable({
                     return (
                       <Fragment key={`${activity.activity.id}-${row.student.id}`}>
                         <td
-                          className={`h-12 border-b border-line p-0 ${
+                          className={`h-12 min-w-[56px] border-b border-line p-0 ${
                             lecture ? (last ? 'border-r' : '') : 'border-r border-line/50'
                           }`}
                         >
@@ -428,7 +414,7 @@ export function JournalTable({
                           )}
                         </td>
                         {lecture ? null : (
-                          <td className={`h-12 border-b border-line p-0 ${last ? 'border-r' : ''}`}>
+                          <td className={`h-12 min-w-[84px] border-b border-line p-0 ${last ? 'border-r' : ''}`}>
                             {column ? (
                               <ScoreCell
                                 snapshot={snapshot}
@@ -498,7 +484,7 @@ export function JournalTable({
                 return (
                   <Fragment key={`footer-${activity.activity.id}`}>
                     <td
-                      className="sticky bottom-0 z-10 h-10 border-t border-r border-line/50 bg-elevated px-1 text-center"
+                      className="sticky bottom-0 z-10 h-10 min-w-[56px] border-t border-r border-line/50 bg-elevated px-1 text-center"
                     >
                       <span className="tnum text-[10px] text-moss">
                         {present}/{rows.length}
@@ -506,7 +492,7 @@ export function JournalTable({
                     </td>
                     {lecture ? null : (
                       <td
-                        className={`sticky bottom-0 z-10 h-10 border-t border-line bg-elevated px-1 text-center ${
+                        className={`sticky bottom-0 z-10 h-10 min-w-[84px] border-t border-line bg-elevated px-1 text-center ${
                           last ? 'border-r' : ''
                         }`}
                       >
@@ -571,7 +557,7 @@ function AttendanceCell({
       }`}
     >
       <span
-        className={`flex h-5 w-5 items-center justify-center rounded-full ${
+        className={`flex h-6 w-6 items-center justify-center rounded-full ${
           present === true
             ? 'bg-moss text-surface'
             : present === false
@@ -581,11 +567,8 @@ function AttendanceCell({
       >
         <Icon
           name={present === true ? 'check' : present === false ? 'close' : 'clock'}
-          size={10}
+          size={12}
         />
-      </span>
-      <span className="text-[9px] font-medium">
-        {present === true ? 'был' : present === false ? 'нет' : '—'}
       </span>
     </button>
   );
