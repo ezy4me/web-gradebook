@@ -1,0 +1,40 @@
+name: Supabase keep-alive
+
+# Бесплатный проект Supabase приостанавливается после ~7 дней без запросов.
+# Лёгкий пинг раз в сутки держит его живым. Секреты репозитория:
+#   SUPABASE_URL      — https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY — публичный anon key
+# Если секреты не заданы, job просто завершится успешно без запросов.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST endpoint
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "Секреты SUPABASE_URL/SUPABASE_ANON_KEY не заданы — пропускаем."
+            exit 0
+          fi
+          code=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/")
+          echo "HTTP $code"
+          if [ "$code" -ge 200 ] && [ "$code" -lt 500 ]; then
+            echo "Проект доступен."
+            exit 0
+          fi
+          echo "Проект недоступен." >&2
+          exit 1

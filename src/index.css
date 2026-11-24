@@ -1,0 +1,271 @@
+@import 'tailwindcss';
+
+@font-face {
+  font-family: 'Golos Text';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('./assets/fonts/golos-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Golos Text';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('./assets/fonts/golos-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./assets/fonts/literata-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./assets/fonts/literata-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@theme {
+  --color-bg: #f2f1ec;
+  --color-surface: #fbfaf7;
+  --color-elevated: #e9e7e0;
+  --color-line: #ddd9cf;
+  --color-line-strong: #c9c4b8;
+  --color-ink: #1c1a16;
+  --color-dim: #575146;
+  --color-faint: #8f887a;
+  --color-clay: #a54d28;
+  --color-clay-soft: #f1e2d7;
+  --color-moss: #52683d;
+  --color-moss-soft: #e7ebdc;
+  --color-steel: #3c5765;
+  --color-steel-soft: #e3eaee;
+  --color-danger: #a53226;
+  --color-danger-soft: #f4e0dc;
+  --color-success: #4b6639;
+  --color-success-soft: #e7ebdc;
+  --color-warn: #8f5a1c;
+  --color-warn-soft: #f4e8d4;
+  --color-grade2: #b23a2b;
+  --color-grade2-soft: #f5dfda;
+  --color-grade3: #c06a1d;
+  --color-grade3-soft: #f7e6d3;
+  --color-grade4: #a8861e;
+  --color-grade4-soft: #f5eed0;
+  --color-grade5: #4b7a3a;
+  --color-grade5-soft: #e5eedb;
+
+  --font-sans: 'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Literata', Georgia, 'Times New Roman', serif;
+
+  --text-2xs: 11px;
+  --text-2xs--line-height: 15px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 15px;
+  --text-base--line-height: 21px;
+  --text-md: 16px;
+  --text-md--line-height: 22px;
+  --text-lg: 18px;
+  --text-lg--line-height: 24px;
+  --text-xl: 21px;
+  --text-xl--line-height: 27px;
+  --text-2xl: 26px;
+  --text-2xl--line-height: 31px;
+  --text-3xl: 31px;
+  --text-3xl--line-height: 35px;
+
+  --radius-card: 16px;
+  --radius-sheet: 24px;
+  --shadow-sheet: 0 -18px 48px -24px rgba(28, 26, 22, 0.35);
+  --shadow-fab: 0 10px 24px -12px rgba(28, 26, 22, 0.5);
+  --container-app: 600px;
+  --ease-sheet: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #151412;
+  --color-surface: #1d1b18;
+  --color-elevated: #26231f;
+  --color-line: #33302a;
+  --color-line-strong: #45413a;
+  --color-ink: #efece4;
+  --color-dim: #c3bcae;
+  --color-faint: #8b8477;
+  --color-clay: #d99268;
+  --color-clay-soft: #35241b;
+  --color-moss: #a9bd8a;
+  --color-moss-soft: #242c1d;
+  --color-steel: #9cb7c4;
+  --color-steel-soft: #1d272c;
+  --color-danger: #e0806f;
+  --color-danger-soft: #35201d;
+  --color-success: #a9bd8a;
+  --color-success-soft: #242c1d;
+  --color-warn: #d9ac6c;
+  --color-warn-soft: #322818;
+  --color-grade2: #e0806f;
+  --color-grade2-soft: #35201d;
+  --color-grade3: #dd9a5c;
+  --color-grade3-soft: #352818;
+  --color-grade4: #cfb45e;
+  --color-grade4-soft: #322d18;
+  --color-grade5: #a9bd8a;
+  --color-grade5-soft: #242c1d;
+  --shadow-sheet: 0 -18px 48px -24px rgba(0, 0, 0, 0.7);
+  --shadow-fab: 0 10px 24px -10px rgba(0, 0, 0, 0.8);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html {
+    background-color: var(--color-bg);
+  }
+
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+    font-feature-settings: 'ss01' 1;
+    overscroll-behavior-y: none;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  ::selection {
+    background: var(--color-clay-soft);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-clay);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 6px;
+  }
+}
+
+@layer components {
+  .display {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
+
+  button,
+  a,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .pad-above-nav {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .fab-above-nav {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .toast-above-nav {
+    bottom: calc(152px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .scroll-x {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sheet-in {
+    animation: sheet-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .fade-in {
+    animation: fade-in 160ms ease-out both;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

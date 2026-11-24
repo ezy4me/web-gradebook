@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-ssr/
+.verify/
+.env
+.env.local
+.env.*.local
+*.local
+*.tsbuildinfo
+.DS_Store
+*.log
