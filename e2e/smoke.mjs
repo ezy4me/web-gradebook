@@ -107,7 +107,11 @@ try {
   await page.waitForTimeout(700);
   check('таблица: балл сохраняется', (await tableInput.inputValue()) === '77');
   check('таблица: явка в клетке', (await page.locator('button[aria-label^="Посещаемость:"]').count()) > 0);
+  check('таблица: виды занятий', (await page.getByRole('tab', { name: 'Практики' }).count()) === 1);
   await shot('02b-table');
+  await page.getByRole('tab', { name: 'Лекции' }).click();
+  await page.waitForTimeout(400);
+  check('таблица: у лекций только явка', (await page.locator('input[aria-label^="Балл:"]').count()) === 0);
 
   await page.getByRole('tab', { name: 'Студенты' }).click();
   await page.waitForTimeout(600);

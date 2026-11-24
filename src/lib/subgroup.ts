@@ -2,6 +2,7 @@
 export interface SubgroupTone {
   dot: string;
   badge: string;
+  cell: string;
   border: string;
   text: string;
   index: number;
@@ -11,18 +12,21 @@ const TONES = [
   {
     dot: 'bg-clay',
     badge: 'bg-clay-soft text-clay',
+    cell: 'bg-clay-soft',
     border: 'border-clay',
     text: 'text-clay',
   },
   {
     dot: 'bg-moss',
     badge: 'bg-moss-soft text-moss',
+    cell: 'bg-moss-soft',
     border: 'border-moss',
     text: 'text-moss',
   },
   {
     dot: 'bg-steel',
     badge: 'bg-steel-soft text-steel',
+    cell: 'bg-steel-soft',
     border: 'border-steel',
     text: 'text-steel',
   },

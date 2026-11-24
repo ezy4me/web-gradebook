@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Activity, ActivitySession, Student, Subject } from '../db/types';
+import type { Activity, ActivitySession, ActivityType, Student, Subject } from '../db/types';
 import { setAttendance, setGrade } from '../db/repo';
 import {
   activityMaxScore,
@@ -9,42 +9,47 @@ import {
   gradeOf,
   groupRanking,
   isGradedType,
-  sessionRoster,
+  subjectActivities,
   type Snapshot,
   type StudentProgress,
 } from '../domain/grading';
 import { formatDateShort } from '../lib/date';
 import { GRADE_CLASSES, gradeBand, scoreBand } from '../lib/grades';
 import { subgroupTone } from '../lib/subgroup';
+import { countLabel } from '../lib/text';
 import { Icon } from '../components/icons';
 import { EmptyState } from '../components/ui';
 
-interface Column {
+const TYPE_LABEL: Record<ActivityType, { one: string; many: string }> = {
+  lecture: { one: 'Лекция', many: 'Лекции' },
+  practice: { one: 'Практика', many: 'Практики' },
+  lab: { one: 'Лабораторная', many: 'Лабораторные' },
+};
+
+interface SessionColumn {
   session: ActivitySession;
-  activity: Activity;
   subgroupName: string | null;
   subgroupIndex: number | null;
-  attendanceOnly: boolean;
   max: number;
-  rosterIds: Set<string>;
+  attendanceOnly: boolean;
+}
+
+interface ActivityColumn {
+  activity: Activity;
+  sessions: SessionColumn[];
+}
+
+interface TypeTable {
+  type: ActivityType;
+  activities: ActivityColumn[];
 }
 
 interface StudentRow {
   student: Student;
   progress: StudentProgress;
+  subgroupId: string | null;
   subgroupName: string | null;
   subgroupIndex: number | null;
-}
-
-const TYPE_SHORT: Record<Activity['type'], string> = {
-  lecture: 'Лек',
-  practice: 'Пр',
-  lab: 'ЛР',
-};
-
-function shortTitle(activity: Activity): string {
-  const number = /(\d+)/.exec(activity.title)?.[1];
-  return `${TYPE_SHORT[activity.type]}${number ? ` ${number}` : ''}`;
 }
 
 export function JournalTable({
@@ -57,6 +62,7 @@ export function JournalTable({
   groupId: string;
 }) {
   const navigate = useNavigate();
+  const [type, setType] = useState<ActivityType>('lab');
 
   const students = useMemo<StudentRow[]>(() => {
     if (!groupId) return [];
@@ -73,6 +79,7 @@ export function JournalTable({
         return {
           student: row.student,
           progress: row.progress,
+          subgroupId: subgroup?.id ?? null,
           subgroupName: subgroup?.name ?? null,
           subgroupIndex: subgroup?.index ?? null,
         };
@@ -80,27 +87,50 @@ export function JournalTable({
       .sort((a, b) => a.student.name.localeCompare(b.student.name, 'ru'));
   }, [snapshot, subject.id, groupId]);
 
-  const columns = useMemo<Column[]>(() => {
+  const tables = useMemo<TypeTable[]>(() => {
     if (!groupId) return [];
-    return snapshot.sessions
-      .filter((session) => !session.deletedAt && session.subjectId === subject.id && session.groupId === groupId)
-      .map((session): Column | null => {
-        const activity = snapshot.activities.find((a) => a.id === session.activityId && !a.deletedAt);
-        if (!activity) return null;
-        const subgroup = snapshot.subgroups.find((s) => s.id === session.subgroupId);
-        return {
-          session,
-          activity,
-          subgroupName: subgroup?.name ?? null,
-          subgroupIndex: subgroup?.index ?? null,
-          attendanceOnly: !isGradedType(activity.type),
-          max: activityMaxScore(subject, activity),
-          rosterIds: new Set(sessionRoster(snapshot, session).map((student) => student.id)),
-        };
+    const activities = subjectActivities(snapshot, subject.id);
+    const sessions = snapshot.sessions.filter(
+      (session) => !session.deletedAt && session.subjectId === subject.id && session.groupId === groupId,
+    );
+    const order: ActivityType[] = ['lab', 'practice', 'lecture'];
+    return order
+      .map((activityType) => {
+        const columns: ActivityColumn[] = activities
+          .filter((activity) => activity.type === activityType)
+          .map((activity) => {
+            const activitySessions = sessions
+              .filter((session) => session.activityId === activity.id)
+              .map((session): SessionColumn => {
+                const subgroup = snapshot.subgroups.find((s) => s.id === session.subgroupId);
+                return {
+                  session,
+                  subgroupName: subgroup?.name ?? null,
+                  subgroupIndex: subgroup?.index ?? null,
+                  max: activityMaxScore(subject, activity),
+                  attendanceOnly: !isGradedType(activity.type),
+                };
+              })
+              .sort((a, b) => {
+                const left = a.subgroupIndex ?? 0;
+                const right = b.subgroupIndex ?? 0;
+                if (left !== right) return left - right;
+                return a.session.date.localeCompare(b.session.date);
+              });
+            return activitySessions.length ? { activity, sessions: activitySessions } : null;
+          })
+          .filter((column): column is ActivityColumn => Boolean(column))
+          .sort((a, b) => a.activity.order - b.activity.order);
+        return columns.length ? { type: activityType, activities: columns } : null;
       })
-      .filter((column): column is Column => Boolean(column))
-      .sort((a, b) => a.session.date.localeCompare(b.session.date));
+      .filter((table): table is TypeTable => Boolean(table));
   }, [snapshot, subject.id, groupId]);
+
+  useEffect(() => {
+    if (tables.length && !tables.some((table) => table.type === type)) {
+      setType(tables[0].type);
+    }
+  }, [tables, type]);
 
   if (!groupId) {
     return (
@@ -112,141 +142,222 @@ export function JournalTable({
     );
   }
 
-  if (!students.length || !columns.length) {
+  if (!students.length || !tables.length) {
     return (
       <EmptyState
         icon="grid"
         title="Таблица пока пуста"
-        description="Нужны студенты группы и хотя бы одно занятие. Добавьте занятие — колонки появятся здесь."
+        description="Нужны студенты группы и хотя бы одно занятие. Добавьте занятие — таблицы по видам появятся здесь."
       />
     );
   }
 
+  const current = tables.find((table) => table.type === type) ?? tables[0];
   const subgroups = [...new Map(
     students
       .filter((row) => row.subgroupIndex != null)
       .map((row) => [row.subgroupIndex, { name: row.subgroupName, index: row.subgroupIndex }]),
   ).values()].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 
+  const typeFinal = (row: StudentRow): number | null => {
+    if (current.type === 'lecture') {
+      return row.progress.lectureSessions
+        ? (row.progress.lecturePresent / row.progress.lectureSessions) * 100
+        : null;
+    }
+    return row.progress.byType[current.type].finalPercent;
+  };
+
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-faint">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-faint">
         {subgroups.map((subgroup) => {
           const tone = subgroupTone(subgroup.index);
           return (
             <span key={subgroup.index} className="inline-flex items-center gap-1.5">
-              <span className={`h-2 w-2 rounded-full ${tone.dot}`} />
+              <span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} />
               {subgroup.name}
             </span>
           );
         })}
-        <span className="inline-flex items-center gap-1.5">
+        <span className="hidden items-center gap-1.5 sm:inline-flex">
           <Icon name="check" size={12} className="text-moss" />
           явка
         </span>
-        <span className="hidden sm:inline">Балл вводится прямо в клетке, явка — кружком рядом.</span>
-        <span className="sm:hidden">Прокрутите таблицу вбок →</span>
       </div>
 
-      <div className="max-h-[calc(100dvh-300px)] overflow-auto rounded-card border border-line bg-surface lg:max-h-[calc(100dvh-280px)]">
+      <div role="tablist" aria-label="Вид занятий" className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5">
+        {tables.map((table) => {
+          const active = table.type === current.type;
+          return (
+            <button
+              key={table.type}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setType(table.type)}
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-[12px] transition-colors focus-ring ${
+                active
+                  ? 'border-ink bg-ink text-surface'
+                  : 'border-line bg-surface text-dim hover:border-line-strong'
+              }`}
+            >
+              {TYPE_LABEL[table.type].many}
+              <span className={`tnum ml-1.5 text-[10px] ${active ? 'text-surface/70' : 'text-faint'}`}>
+                {table.activities.length}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-2 flex items-baseline justify-between gap-3 text-[11px] text-faint">
+        <span className="hidden sm:inline">Явка — слева, балл — справа</span>
+        <span className="sm:hidden">Прокрутите вбок →</span>
+        <span>
+          {countLabel(
+            current.activities.reduce((sum, activity) => sum + activity.sessions.length, 0),
+            'сессия',
+            'сессии',
+            'сессий',
+          )}
+        </span>
+      </div>
+
+      <div className="mt-1.5 max-h-[calc(100dvh-370px)] overflow-auto rounded-card border border-line bg-surface lg:max-h-[calc(100dvh-350px)]">
         <table className="w-full min-w-max border-separate border-spacing-0 text-[12px]">
           <thead>
             <tr>
               <th
-                className="sticky left-0 top-0 z-30 min-w-[150px] border-b border-r border-line bg-elevated px-3 py-2 text-left font-medium text-dim lg:min-w-[200px]"
+                rowSpan={2}
+                className="sticky left-0 top-0 z-30 min-w-[146px] border-b border-r border-line bg-elevated px-3 py-2 text-left font-medium text-dim lg:min-w-[190px]"
               >
                 Студент
               </th>
-              {columns.map((column) => {
-                const tone = subgroupTone(column.subgroupIndex);
-                return (
-                  <th
-                    key={column.session.id}
-                    title={`${column.activity.title} · ${column.subgroupName ?? 'вся группа'}`}
-                    className={`sticky top-0 z-20 min-w-[64px] border-b border-r border-line px-1.5 py-1.5 text-center align-bottom font-normal ${
-                      column.subgroupName ? tone.badge : 'bg-elevated text-dim'
-                    }`}
-                  >
-                    <span className="block truncate text-[10.5px] uppercase tracking-wide opacity-80">
-                      {shortTitle(column.activity)}
-                    </span>
-                    <span className="tnum mt-0.5 block text-[11.5px] font-medium text-ink">
-                      {formatDateShort(column.session.date)}
-                    </span>
-                    <span className="mt-0.5 block truncate text-[10px] opacity-75">
-                      {column.attendanceOnly ? 'явка' : `макс ${column.max}`}
-                    </span>
-                  </th>
-                );
-              })}
-              <th className="sticky top-0 z-20 min-w-[56px] border-b border-line bg-elevated px-2 py-2 text-center font-medium text-dim">
+              {current.activities.map((activity) => (
+                <th
+                  key={activity.activity.id}
+                  colSpan={activity.sessions.length}
+                  title={activity.activity.title}
+                  className="sticky top-0 z-20 h-9 border-b border-r border-line bg-elevated px-2 py-1 text-left text-[11px] font-medium text-ink"
+                >
+                  <span className="block truncate">{activity.activity.title}</span>
+                </th>
+              ))}
+              <th
+                rowSpan={2}
+                className="sticky top-0 z-20 min-w-[64px] border-b border-line bg-elevated px-2 py-2 text-center font-medium text-dim"
+              >
                 Итог
               </th>
+            </tr>
+            <tr>
+              {current.activities.flatMap((activity) =>
+                activity.sessions.map((column) => {
+                  const tone = subgroupTone(column.subgroupIndex);
+                  return (
+                    <th
+                      key={column.session.id}
+                      title={`${TYPE_LABEL[current.type].one} · ${column.subgroupName ?? 'вся группа'}`}
+                      className={`sticky top-9 z-20 min-w-[72px] border-b border-r border-line px-1 py-1 text-center align-middle font-normal ${
+                        column.subgroupName ? tone.cell : 'bg-elevated'
+                      }`}
+                    >
+                      <span className="tnum block text-[11px] font-medium text-ink">
+                        {formatDateShort(column.session.date)}
+                      </span>
+                      <span
+                        className={`mt-0.5 block truncate text-[9px] ${
+                          column.subgroupName ? tone.text : 'text-faint'
+                        }`}
+                      >
+                        {column.subgroupIndex ? `П${column.subgroupIndex}` : 'вся группа'}
+                      </span>
+                    </th>
+                  );
+                }),
+              )}
             </tr>
           </thead>
           <tbody>
             {students.map((row, index) => {
               const tone = subgroupTone(row.subgroupIndex);
-              const progress = row.progress;
-              const band = gradeBand(progress.finalPercent);
+              const percent = typeFinal(row);
+              const band = gradeBand(percent);
               const bandTone = band ? GRADE_CLASSES[band.tone] : null;
               return (
-                <tr key={row.student.id} className="group">
+                <tr key={row.student.id}>
                   <th
                     scope="row"
-                    className={`sticky left-0 z-10 border-b border-r border-line bg-surface px-2 py-2 text-left font-normal ${
-                      row.subgroupIndex ? `border-l-2 ${tone.border}` : ''
+                    title={row.subgroupName ?? 'вся группа'}
+                    className={`sticky left-0 z-10 h-10 border-b border-r border-line px-2 text-left font-normal ${
+                      row.subgroupIndex ? `${tone.cell} border-l-2 ${tone.border}` : 'bg-surface'
                     }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <span className="tnum w-5 shrink-0 text-center text-[10.5px] text-faint">
+                    <span className="flex items-center gap-1.5">
+                      <span className="tnum w-4 shrink-0 text-center text-[10px] text-faint">
                         {index + 1}
                       </span>
                       <button
                         type="button"
                         onClick={() => navigate(`/subject/${subject.id}/student/${row.student.id}`)}
-                        className="min-w-0 flex-1 truncate text-left text-[13px] text-ink focus-ring"
+                        className="min-w-0 flex-1 truncate text-left text-[12.5px] font-medium text-ink focus-ring"
                       >
                         {row.student.name}
                       </button>
                     </span>
-                    <span className="mt-0.5 block pl-7 text-[10px] text-faint">
-                      {row.subgroupName ?? 'вся группа'}
-                    </span>
                   </th>
 
-                  {columns.map((column) => {
-                    const applies = column.rosterIds.has(row.student.id);
-                    return (
-                      <td
-                        key={column.session.id}
-                        className={`border-b border-r border-line p-0.5 text-center ${
-                          applies ? '' : 'bg-elevated/40'
+                  {current.activities.flatMap((activity) =>
+                    activity.sessions.map((column) => {
+                      const applies =
+                        column.session.subgroupId == null ||
+                        (row.subgroupId != null && row.subgroupId === column.session.subgroupId);
+                      return (
+                        <td
+                          key={column.session.id}
+                          className={`border-b border-r border-line p-0 ${
+                            applies
+                              ? row.subgroupIndex
+                                ? tone.cell
+                                : 'bg-surface'
+                              : 'bg-elevated/30'
+                          }`}
+                        >
+                          {applies ? (
+                            <Cell
+                              snapshot={snapshot}
+                              subject={subject}
+                              column={column}
+                              student={row.student}
+                            />
+                          ) : (
+                            <span className="block h-10" />
+                          )}
+                        </td>
+                      );
+                    }),
+                  )}
+
+                  <td className="h-10 border-b border-line px-1 py-0 text-center">
+                    <span className="inline-flex items-baseline justify-center gap-1">
+                      <span
+                        className={`tnum text-[12px] font-semibold ${
+                          bandTone ? bandTone.text : 'text-faint'
                         }`}
                       >
-                        {applies ? (
-                          <Cell
-                            snapshot={snapshot}
-                            subject={subject}
-                            column={column}
-                            student={row.student}
-                          />
-                        ) : (
-                          <span className="block py-2 text-[11px] text-faint/60">·</span>
-                        )}
-                      </td>
-                    );
-                  })}
-
-                  <td className="border-b border-line px-1 py-2 text-center">
-                    <span className={`tnum text-[12.5px] font-semibold ${bandTone ? bandTone.text : 'text-faint'}`}>
-                      {formatPercent(progress.finalPercent)}
-                    </span>
-                    {band ? (
-                      <span className={`tnum mt-0.5 block text-[10px] ${bandTone?.text}`}>
-                        {band.grade}
+                        {current.type === 'lecture'
+                          ? row.progress.lectureSessions
+                            ? `${row.progress.lecturePresent}/${row.progress.lectureSessions}`
+                            : '—'
+                          : formatPercent(percent)}
                       </span>
-                    ) : null}
+                      {band && current.type !== 'lecture' ? (
+                        <span className={`tnum text-[9px] font-semibold ${bandTone?.text}`}>
+                          {band.grade}
+                        </span>
+                      ) : null}
+                    </span>
                   </td>
                 </tr>
               );
@@ -255,39 +366,51 @@ export function JournalTable({
           <tfoot>
             <tr>
               <th className="sticky bottom-0 left-0 z-30 border-r border-t border-line bg-elevated px-3 py-2 text-left text-[11px] font-medium text-dim">
-                Итого по колонке
+                Итого
               </th>
-              {columns.map((column) => {
-                const total = column.rosterIds.size;
-                const present = students.filter(
-                  (row) =>
-                    column.rosterIds.has(row.student.id) &&
-                    attendanceOf(snapshot, column.session.id, row.student.id)?.present === true,
-                ).length;
-                const scores = students
-                  .filter((row) => column.rosterIds.has(row.student.id))
-                  .map((row) => gradeOf(snapshot, column.session.id, row.student.id)?.score)
-                  .filter((score): score is number => score != null);
-                const average = scores.length
-                  ? (scores.reduce((sum, score) => sum + score, 0) / scores.length / column.max) * 100
-                  : null;
-                return (
-                  <td key={column.session.id} className="sticky bottom-0 z-10 border-r border-t border-line bg-elevated/95 px-1 py-1.5 text-center">
-                    <span className="tnum block text-[10.5px] text-moss">
-                      {present}/{total}
-                    </span>
-                    {column.attendanceOnly ? null : (
-                      <span className="tnum block text-[10px] text-faint">
-                        {average == null ? '—' : `${Math.round(average)}%`}
+              {current.activities.flatMap((activity) =>
+                activity.sessions.map((column) => {
+                  const total = students.filter(
+                    (row) =>
+                      column.session.subgroupId == null ||
+                      (row.subgroupId != null && row.subgroupId === column.session.subgroupId),
+                  ).length;
+                  const present = students.filter(
+                    (row) =>
+                      (column.session.subgroupId == null ||
+                        (row.subgroupId != null && row.subgroupId === column.session.subgroupId)) &&
+                      attendanceOf(snapshot, column.session.id, row.student.id)?.present === true,
+                  ).length;
+                  const scores = students
+                    .filter(
+                      (row) =>
+                        column.session.subgroupId == null ||
+                        (row.subgroupId != null && row.subgroupId === column.session.subgroupId),
+                    )
+                    .map((row) => gradeOf(snapshot, column.session.id, row.student.id)?.score)
+                    .filter((score): score is number => score != null);
+                  const average = scores.length
+                    ? (scores.reduce((sum, score) => sum + score, 0) / scores.length / column.max) * 100
+                    : null;
+                  return (
+                    <td
+                      key={column.session.id}
+                      className="sticky bottom-0 z-10 border-r border-t border-line bg-elevated px-1 py-1.5 text-center"
+                    >
+                      <span className="tnum block text-[10px] text-moss">
+                        {present}/{total}
                       </span>
-                    )}
-                  </td>
-                );
-              })}
-              <td className="sticky bottom-0 z-10 border-t border-line bg-elevated/95 px-1 py-1.5 text-center">
-                <span className="text-[10px] text-faint">
-                  {students.length} студ.
-                </span>
+                      {column.attendanceOnly ? null : (
+                        <span className="tnum block text-[9.5px] text-faint">
+                          {average == null ? '—' : `${Math.round(average)}%`}
+                        </span>
+                      )}
+                    </td>
+                  );
+                }),
+              )}
+              <td className="sticky bottom-0 z-10 border-t border-line bg-elevated px-1 py-1.5 text-center">
+                <span className="text-[9.5px] text-faint">{students.length} студ.</span>
               </td>
             </tr>
           </tfoot>
@@ -305,7 +428,7 @@ function Cell({
 }: {
   snapshot: Snapshot;
   subject: Subject;
-  column: Column;
+  column: SessionColumn;
   student: Student;
 }) {
   const grade = gradeOf(snapshot, column.session.id, student.id);
@@ -322,7 +445,7 @@ function Cell({
     if (trimmed === '') {
       await setGrade({
         subjectId: subject.id,
-        activityId: column.activity.id,
+        activityId: column.session.activityId,
         sessionId: column.session.id,
         studentId: student.id,
         score: null,
@@ -335,7 +458,7 @@ function Cell({
     if (score !== parsed) setValue(String(score));
     await setGrade({
       subjectId: subject.id,
-      activityId: column.activity.id,
+      activityId: column.session.activityId,
       sessionId: column.session.id,
       studentId: student.id,
       score,
@@ -353,22 +476,24 @@ function Cell({
     });
   };
 
+  const present = attendance?.present;
+  const attendanceClass =
+    present === true
+      ? 'text-moss'
+      : present === false
+        ? 'text-clay'
+        : 'text-faint';
+
   if (column.attendanceOnly) {
     return (
       <button
         type="button"
         onClick={() => void toggleAttendance()}
-        aria-label={`Явка: ${student.name}, ${column.activity.title}`}
-        className={`flex h-9 w-full items-center justify-center rounded-md transition-colors focus-ring ${
-          attendance?.present === true
-            ? 'bg-moss-soft text-moss'
-            : attendance?.present === false
-              ? 'bg-clay-soft text-clay'
-              : 'text-faint hover:bg-elevated'
-        }`}
+        aria-label={`Явка: ${student.name}, ${column.session.date}`}
+        className={`flex h-10 w-full items-center justify-center transition-colors hover:bg-elevated/40 focus-ring ${attendanceClass}`}
       >
         <Icon
-          name={attendance?.present === true ? 'check' : attendance?.present === false ? 'close' : 'clock'}
+          name={present === true ? 'check' : present === false ? 'close' : 'clock'}
           size={14}
         />
       </button>
@@ -376,44 +501,44 @@ function Cell({
   }
 
   const band = scoreBand(value.trim() === '' ? null : Number(value.replace(',', '.')), column.max);
-  const tone = band ? GRADE_CLASSES[band.tone] : null;
+  const bandTone = band ? GRADE_CLASSES[band.tone] : null;
 
   return (
-    <div className="flex h-9 items-center justify-center gap-0.5">
+    <div className="flex h-10 w-full">
       <button
         type="button"
         onClick={() => void toggleAttendance()}
-        aria-label={`Посещаемость: ${student.name}, ${column.activity.title}`}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors focus-ring ${
-          attendance?.present === true
-            ? 'border-moss bg-moss-soft text-moss'
-            : attendance?.present === false
-              ? 'border-clay/40 bg-clay-soft text-clay'
-              : 'border-line-strong text-faint'
-        }`}
+        aria-label={`Посещаемость: ${student.name}, ${column.session.date}`}
+        className={`flex w-8 shrink-0 items-center justify-center border-r border-line/70 transition-colors hover:bg-elevated/40 focus-ring ${attendanceClass}`}
       >
         <Icon
-          name={attendance?.present === true ? 'check' : attendance?.present === false ? 'close' : 'clock'}
-          size={9}
+          name={present === true ? 'check' : present === false ? 'close' : 'clock'}
+          size={11}
         />
       </button>
-      <input
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={() => void save()}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
-        }}
-        inputMode="decimal"
-        placeholder="—"
-        aria-label={`Балл: ${student.name}, ${column.activity.title}`}
-        className={`tnum h-7 w-7 rounded border-0 bg-transparent p-0 text-center text-[12px] placeholder:text-faint focus:bg-elevated focus:outline-none ${
-          tone ? tone.text : 'text-ink'
-        }`}
-      />
-      <span className={`tnum w-2.5 shrink-0 text-[9px] font-semibold ${tone?.text ?? 'text-transparent'}`}>
-        {band?.grade ?? ''}
-      </span>
+      <div className="flex min-w-0 flex-1 items-center justify-center">
+        <input
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onBlur={() => void save()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
+          }}
+          inputMode="decimal"
+          placeholder="—"
+          aria-label={`Балл: ${student.name}, ${column.session.date}`}
+          className={`tnum h-9 w-8 border-0 bg-transparent p-0 text-center text-[12px] placeholder:text-faint focus:bg-elevated/70 focus:outline-none ${
+            bandTone ? bandTone.text : 'text-ink'
+          }`}
+        />
+        <span
+          className={`tnum w-2.5 shrink-0 text-[9px] font-semibold ${
+            bandTone?.text ?? 'text-transparent'
+          }`}
+        >
+          {band?.grade ?? ''}
+        </span>
+      </div>
     </div>
   );
 }
