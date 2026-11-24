@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Дымовой e2e-тест web-gradebook.
  *
  * Требуется запущенный dev/preview сервер и установленный Chromium-браузер:
@@ -106,7 +106,7 @@ try {
   await tableInput.blur();
   await page.waitForTimeout(700);
   check('таблица: балл сохраняется', (await tableInput.inputValue()) === '77');
-  check('таблица: явка в клетке', (await page.locator('button[aria-label^="Посещаемость:"]').count()) > 0);
+  check('таблица: явка в клетке', (await page.locator('button[aria-label^="Явка:"]').count()) > 0);
   check('таблица: виды занятий', (await page.getByRole('tab', { name: 'Практики' }).count()) === 1);
   await shot('02b-table');
   await page.getByRole('tab', { name: 'Лекции' }).click();

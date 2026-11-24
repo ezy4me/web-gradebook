@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Activity, ActivitySession, ActivityType, Student, Subject } from '../db/types';
 import { setAttendance, setGrade } from '../db/repo';
@@ -20,10 +20,10 @@ import { countLabel } from '../lib/text';
 import { Icon } from '../components/icons';
 import { EmptyState } from '../components/ui';
 
-const TYPE_LABEL: Record<ActivityType, { one: string; many: string }> = {
-  lecture: { one: 'Лекция', many: 'Лекции' },
-  practice: { one: 'Практика', many: 'Практики' },
-  lab: { one: 'Лабораторная', many: 'Лабораторные' },
+const TYPE_LABEL: Record<ActivityType, string> = {
+  lecture: 'Лекции',
+  practice: 'Практики',
+  lab: 'Лабораторные',
 };
 
 interface SessionColumn {
@@ -50,6 +50,17 @@ interface StudentRow {
   subgroupId: string | null;
   subgroupName: string | null;
   subgroupIndex: number | null;
+}
+
+/** Сессия занятия для конкретного студента: общая или его подгруппы. */
+function sessionForStudent(activity: ActivityColumn, student: StudentRow): SessionColumn | null {
+  const whole = activity.sessions.find((column) => column.session.subgroupId == null);
+  if (whole) return whole;
+  return (
+    activity.sessions.find(
+      (column) => student.subgroupId != null && column.session.subgroupId === student.subgroupId,
+    ) ?? null
+  );
 }
 
 export function JournalTable({
@@ -111,12 +122,7 @@ export function JournalTable({
                   attendanceOnly: !isGradedType(activity.type),
                 };
               })
-              .sort((a, b) => {
-                const left = a.subgroupIndex ?? 0;
-                const right = b.subgroupIndex ?? 0;
-                if (left !== right) return left - right;
-                return a.session.date.localeCompare(b.session.date);
-              });
+              .sort((a, b) => a.session.date.localeCompare(b.session.date));
             return activitySessions.length ? { activity, sessions: activitySessions } : null;
           })
           .filter((column): column is ActivityColumn => Boolean(column))
@@ -153,6 +159,9 @@ export function JournalTable({
   }
 
   const current = tables.find((table) => table.type === type) ?? tables[0];
+  const lecture = current.type === 'lecture';
+  const activityWidth = lecture ? 1 : 2;
+
   const subgroups = [...new Map(
     students
       .filter((row) => row.subgroupIndex != null)
@@ -160,7 +169,7 @@ export function JournalTable({
   ).values()].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 
   const typeFinal = (row: StudentRow): number | null => {
-    if (current.type === 'lecture') {
+    if (lecture) {
       return row.progress.lectureSessions
         ? (row.progress.lecturePresent / row.progress.lectureSessions) * 100
         : null;
@@ -175,14 +184,16 @@ export function JournalTable({
     ? typeValues.reduce((sum, value) => sum + value, 0) / typeValues.length
     : null;
   const typeBand = gradeBand(typeAverage);
-  const typeTone =
-    current.type === 'lecture'
-      ? typeAverage != null && typeAverage >= subject.passThreshold
-        ? GRADE_CLASSES.grade5
-        : GRADE_CLASSES.grade2
-      : typeBand
-        ? GRADE_CLASSES[typeBand.tone]
-        : null;
+  const typeTone = lecture
+    ? typeAverage != null && typeAverage >= subject.passThreshold
+      ? GRADE_CLASSES.grade5
+      : GRADE_CLASSES.grade2
+    : typeBand
+      ? GRADE_CLASSES[typeBand.tone]
+      : null;
+
+  const dateRowHeight = 32;
+  const dateRowOffset = 36;
 
   return (
     <div>
@@ -196,7 +207,7 @@ export function JournalTable({
             </span>
           );
         })}
-        <span className="hidden items-center gap-1.5 sm:inline-flex">
+        <span className="inline-flex items-center gap-1.5">
           <Icon name="check" size={12} className="text-moss" />
           явка
         </span>
@@ -218,7 +229,7 @@ export function JournalTable({
                   : 'border-line bg-surface text-dim hover:border-line-strong'
               }`}
             >
-              {TYPE_LABEL[table.type].many}
+              {TYPE_LABEL[table.type]}
               <span className={`tnum ml-1.5 text-[10px] ${active ? 'text-surface/70' : 'text-faint'}`}>
                 {table.activities.length}
               </span>
@@ -231,19 +242,19 @@ export function JournalTable({
         <span className="flex min-w-0 items-baseline gap-1.5">
           <span>
             {countLabel(
-              current.activities.reduce((sum, activity) => sum + activity.sessions.length, 0),
-              'сессия',
-              'сессии',
-              'сессий',
+              current.activities.length,
+              'занятие',
+              'занятия',
+              'занятий',
             )}
           </span>
           {typeAverage != null ? (
             <>
               <span className="text-faint/50">·</span>
               <span className={`tnum font-medium ${typeTone?.text ?? 'text-dim'}`}>
-                {current.type === 'lecture' ? 'посещаемость' : 'средний'} {formatPercent(typeAverage)}
+                {lecture ? 'посещаемость' : 'средний'} {formatPercent(typeAverage)}
               </span>
-              {current.type !== 'lecture' && typeBand ? (
+              {!lecture && typeBand ? (
                 <span className={`tnum font-semibold ${typeTone?.text}`}>{typeBand.grade}</span>
               ) : null}
             </>
@@ -254,19 +265,33 @@ export function JournalTable({
       </div>
 
       <div className="mt-1.5 max-h-[calc(100dvh-370px)] overflow-auto rounded-card border border-line bg-surface lg:max-h-[calc(100dvh-350px)]">
-        <table className="w-full min-w-max border-separate border-spacing-0 text-[12px]">
+        <table className="w-full min-w-[640px] table-fixed border-separate border-spacing-0 text-[12px]">
+          <colgroup>
+            <col style={{ width: '24%' }} />
+            {current.activities.map((activity) =>
+              lecture ? (
+                <col key={`col-${activity.activity.id}`} style={{ width: `${68 / current.activities.length}%` }} />
+              ) : (
+                <Fragment key={`cols-${activity.activity.id}`}>
+                  <col style={{ width: `${(68 / current.activities.length) * 0.32}%` }} />
+                  <col style={{ width: `${(68 / current.activities.length) * 0.68}%` }} />
+                </Fragment>
+              ),
+            )}
+            <col style={{ width: '8%' }} />
+          </colgroup>
           <thead>
             <tr>
               <th
-                rowSpan={2}
-                className="sticky left-0 top-0 z-30 min-w-[146px] border-b border-r border-line bg-elevated px-3 py-2 text-center font-medium text-dim lg:min-w-[190px]"
+                rowSpan={3}
+                className="sticky left-0 top-0 z-30 w-[146px] min-w-[146px] max-w-[146px] border-b border-r border-line bg-elevated px-3 py-2 text-center font-medium text-dim lg:w-[190px] lg:min-w-[190px] lg:max-w-[190px]"
               >
                 Студент
               </th>
               {current.activities.map((activity, activityIndex) => (
                 <th
                   key={activity.activity.id}
-                  colSpan={activity.sessions.length}
+                  colSpan={activityWidth}
                   title={activity.activity.title}
                   className={`sticky top-0 z-20 h-9 border-b border-line bg-elevated px-2 py-1 text-center text-[11px] font-medium text-ink ${
                     activityIndex === current.activities.length - 1 ? 'border-r' : ''
@@ -276,34 +301,83 @@ export function JournalTable({
                 </th>
               ))}
               <th
-                rowSpan={2}
-                className="sticky top-0 z-20 min-w-[72px] border-b border-line bg-elevated px-2 py-2 text-center font-medium text-dim"
+                rowSpan={3}
+                className="sticky top-0 z-20 w-[72px] min-w-[72px] max-w-[72px] border-b border-line bg-elevated px-2 py-2 text-center font-medium text-dim"
               >
                 Итог
               </th>
             </tr>
+
             <tr>
-              {current.activities.flatMap((activity) =>
-                activity.sessions.map((column, sessionIndex) => {
-                  const tone = subgroupTone(column.subgroupIndex);
-                  const lastInActivity = sessionIndex === activity.sessions.length - 1;
-                  return (
+              {current.activities.map((activity, activityIndex) => {
+                const dates = [
+                  ...new Map(
+                    activity.sessions.map((column) => [column.session.date, column]),
+                  ).values(),
+                ].sort((a, b) => a.session.date.localeCompare(b.session.date));
+                return (
+                  <th
+                    key={`dates-${activity.activity.id}`}
+                    colSpan={activityWidth}
+                    className={`sticky z-20 h-8 border-b border-line bg-elevated px-1 py-0 text-center align-middle font-normal ${
+                      activityIndex === current.activities.length - 1 ? 'border-r' : ''
+                    }`}
+                    style={{ top: `${dateRowOffset}px` }}
+                  >
+                    <span className="flex items-center justify-center gap-1 whitespace-nowrap text-[10px]">
+                      {dates.map((column, index) => {
+                        const tone = subgroupTone(column.subgroupIndex);
+                        return (
+                          <Fragment key={column.session.id}>
+                            {index > 0 ? <span className="text-faint/60">/</span> : null}
+                            <span className={`tnum font-medium ${column.subgroupName ? tone.text : 'text-dim'}`}>
+                              {formatDateShort(column.session.date)}
+                            </span>
+                          </Fragment>
+                        );
+                      })}
+                    </span>
+                  </th>
+                );
+              })}
+            </tr>
+
+            <tr>
+              {current.activities.flatMap((activity, activityIndex) => {
+                const last = activityIndex === current.activities.length - 1;
+                const cells = lecture ? (
+                  <th
+                    key={`label-${activity.activity.id}`}
+                    className={`sticky z-20 h-7 border-b border-line bg-elevated px-1 text-center text-[9px] font-medium uppercase tracking-wide text-faint ${
+                      last ? 'border-r' : ''
+                    }`}
+                    style={{ top: `${dateRowOffset + dateRowHeight}px` }}
+                  >
+                    Явка
+                  </th>
+                ) : (
+                  <Fragment key={`labels-${activity.activity.id}`}>
                     <th
-                      key={column.session.id}
-                      title={`${TYPE_LABEL[current.type].one} · ${column.subgroupName ?? 'вся группа'}`}
-                      className={`sticky top-9 z-20 min-w-[72px] border-b border-line px-1 py-1.5 text-center align-middle font-normal ${
-                        column.subgroupName ? tone.cell : 'bg-elevated'
-                      } ${lastInActivity ? 'border-r' : ''}`}
+                      className="sticky z-20 h-7 w-14 min-w-14 border-b border-r border-line/50 bg-elevated px-1 text-center text-[9px] font-medium text-faint"
+                      style={{ top: `${dateRowOffset + dateRowHeight}px` }}
                     >
-                      <span className="tnum block text-[11.5px] font-medium text-ink">
-                        {formatDateShort(column.session.date)}
-                      </span>
+                      +/-
                     </th>
-                  );
-                }),
-              )}
+                    <th
+                      className={`sticky z-20 h-7 w-16 min-w-16 border-b border-line bg-elevated px-1 text-center text-[9px] font-medium text-faint ${
+                        last ? 'border-r' : ''
+                      }`}
+                      style={{ top: `${dateRowOffset + dateRowHeight}px` }}
+                    >
+                      Баллы
+                    </th>
+                  </Fragment>
+                );
+                return cells;
+              })}
             </tr>
           </thead>
+
           <tbody>
             {students.map((row, index) => {
               const tone = subgroupTone(row.subgroupIndex);
@@ -314,8 +388,7 @@ export function JournalTable({
                 <tr key={row.student.id}>
                   <th
                     scope="row"
-                    title={row.subgroupName ?? 'вся группа'}
-                    className={`sticky left-0 z-10 h-12 border-b border-r border-line px-2 text-left font-normal ${
+                    className={`sticky left-0 z-10 h-12 w-[146px] min-w-[146px] max-w-[146px] border-b border-r border-line px-2 text-left font-normal lg:w-[190px] lg:min-w-[190px] lg:max-w-[190px] ${
                       row.subgroupIndex ? tone.cell : 'bg-surface'
                     }`}
                   >
@@ -333,52 +406,59 @@ export function JournalTable({
                     </span>
                   </th>
 
-                  {current.activities.flatMap((activity) =>
-                    activity.sessions.map((column, sessionIndex) => {
-                      const applies =
-                        column.session.subgroupId == null ||
-                        (row.subgroupId != null && row.subgroupId === column.session.subgroupId);
-                      const lastInActivity = sessionIndex === activity.sessions.length - 1;
-                      return (
+                  {current.activities.map((activity, activityIndex) => {
+                    const column = sessionForStudent(activity, row);
+                    const last = activityIndex === current.activities.length - 1;
+                    return (
+                      <Fragment key={`${activity.activity.id}-${row.student.id}`}>
                         <td
-                          key={column.session.id}
                           className={`h-12 border-b border-line p-0 ${
-                            applies
-                              ? row.subgroupIndex
-                                ? tone.cell
-                                : 'bg-surface'
-                              : 'bg-elevated/30'
-                          } ${lastInActivity ? 'border-r' : ''}`}
+                            lecture ? (last ? 'border-r' : '') : 'border-r border-line/50'
+                          }`}
                         >
-                          {applies ? (
-                            <Cell
+                          {column ? (
+                            <AttendanceCell
                               snapshot={snapshot}
                               subject={subject}
                               column={column}
                               student={row.student}
                             />
                           ) : (
-                            <span className="block h-12" />
+                            <span className="block h-12 bg-elevated/30" />
                           )}
                         </td>
-                      );
-                    }),
-                  )}
+                        {lecture ? null : (
+                          <td className={`h-12 border-b border-line p-0 ${last ? 'border-r' : ''}`}>
+                            {column ? (
+                              <ScoreCell
+                                snapshot={snapshot}
+                                subject={subject}
+                                column={column}
+                                student={row.student}
+                              />
+                            ) : (
+                              <span className="block h-12 bg-elevated/30" />
+                            )}
+                          </td>
+                        )}
+                      </Fragment>
+                    );
+                  })}
 
-                  <td className="h-12 border-b border-line px-1 py-0 text-center">
+                  <td className="h-12 w-[72px] min-w-[72px] max-w-[72px] border-b border-line px-1 text-center">
                     <span className="inline-flex items-baseline justify-center gap-1">
                       <span
                         className={`tnum text-[12px] font-semibold ${
                           bandTone ? bandTone.text : 'text-faint'
                         }`}
                       >
-                        {current.type === 'lecture'
+                        {lecture
                           ? row.progress.lectureSessions
                             ? `${row.progress.lecturePresent}/${row.progress.lectureSessions}`
                             : '—'
                           : formatPercent(percent)}
                       </span>
-                      {band && current.type !== 'lecture' ? (
+                      {band && !lecture ? (
                         <span className={`tnum text-[9px] font-semibold ${bandTone?.text}`}>
                           {band.grade}
                         </span>
@@ -389,57 +469,59 @@ export function JournalTable({
               );
             })}
           </tbody>
+
           <tfoot>
             <tr>
-              <th className="sticky bottom-0 left-0 z-30 border-r border-t border-line bg-elevated px-3 py-2 text-left text-[11px] font-medium text-dim">
+              <th className="sticky bottom-0 left-0 z-30 w-[146px] min-w-[146px] max-w-[146px] border-r border-t lg:w-[190px] lg:min-w-[190px] lg:max-w-[190px] border-line bg-elevated px-3 py-2 text-left text-[11px] font-medium text-dim">
                 Итого
               </th>
-              {current.activities.flatMap((activity) =>
-                activity.sessions.map((column, sessionIndex) => {
-                  const lastInActivity = sessionIndex === activity.sessions.length - 1;
-                  const total = students.filter(
-                    (row) =>
-                      column.session.subgroupId == null ||
-                      (row.subgroupId != null && row.subgroupId === column.session.subgroupId),
-                  ).length;
-                  const present = students.filter(
-                    (row) =>
-                      (column.session.subgroupId == null ||
-                        (row.subgroupId != null && row.subgroupId === column.session.subgroupId)) &&
-                      attendanceOf(snapshot, column.session.id, row.student.id)?.present === true,
-                  ).length;
-                  const scores = students
-                    .filter(
-                      (row) =>
-                        column.session.subgroupId == null ||
-                        (row.subgroupId != null && row.subgroupId === column.session.subgroupId),
-                    )
-                    .map((row) => gradeOf(snapshot, column.session.id, row.student.id)?.score)
-                    .filter((score): score is number => score != null);
-                  const average = scores.length
-                    ? (scores.reduce((sum, score) => sum + score, 0) / scores.length / column.max) * 100
-                    : null;
-                  return (
+              {current.activities.map((activity, activityIndex) => {
+                const last = activityIndex === current.activities.length - 1;
+                const rows = students
+                  .map((row) => ({ row, column: sessionForStudent(activity, row) }))
+                  .filter((item): item is { row: StudentRow; column: SessionColumn } =>
+                    Boolean(item.column),
+                  );
+                const present = rows.filter(
+                  (item) =>
+                    attendanceOf(snapshot, item.column.session.id, item.row.student.id)?.present === true,
+                ).length;
+                const scores = rows
+                  .map((item) => gradeOf(snapshot, item.column.session.id, item.row.student.id)?.score)
+                  .filter((score): score is number => score != null);
+                const average = scores.length
+                  ? (scores.reduce((sum, score) => sum + score, 0) /
+                      scores.length /
+                      activity.sessions[0].max) *
+                    100
+                  : null;
+                return (
+                  <Fragment key={`footer-${activity.activity.id}`}>
                     <td
-                      key={column.session.id}
-                      className={`sticky bottom-0 z-10 border-t border-line bg-elevated px-1 py-1.5 text-center ${
-                        lastInActivity ? 'border-r' : ''
-                      }`}
+                      className="sticky bottom-0 z-10 h-10 border-t border-r border-line/50 bg-elevated px-1 text-center"
                     >
-                      <span className="tnum block text-[10px] text-moss">
-                        {present}/{total}
+                      <span className="tnum text-[10px] text-moss">
+                        {present}/{rows.length}
                       </span>
-                      {column.attendanceOnly ? null : (
-                        <span className="tnum block text-[9.5px] text-faint">
+                    </td>
+                    {lecture ? null : (
+                      <td
+                        className={`sticky bottom-0 z-10 h-10 border-t border-line bg-elevated px-1 text-center ${
+                          last ? 'border-r' : ''
+                        }`}
+                      >
+                        <span className="tnum text-[10px] text-faint">
                           {average == null ? '—' : `${Math.round(average)}%`}
                         </span>
-                      )}
-                    </td>
-                  );
-                }),
-              )}
-              <td className="sticky bottom-0 z-10 border-t border-line bg-elevated px-1 py-1.5 text-center">
-                <span className="text-[9.5px] text-faint">{students.length} студ.</span>
+                      </td>
+                    )}
+                  </Fragment>
+                );
+              })}
+              <td className="sticky bottom-0 z-10 h-10 w-[72px] min-w-[72px] max-w-[72px] border-t border-line bg-elevated px-1 text-center">
+                <span className={`tnum text-[10px] font-medium ${typeTone?.text ?? 'text-faint'}`}>
+                  {formatPercent(typeAverage)}
+                </span>
               </td>
             </tr>
           </tfoot>
@@ -449,7 +531,67 @@ export function JournalTable({
   );
 }
 
-function Cell({
+/* ------------------------------ Клетки ------------------------------- */
+
+function AttendanceCell({
+  snapshot,
+  subject,
+  column,
+  student,
+}: {
+  snapshot: Snapshot;
+  subject: Subject;
+  column: SessionColumn;
+  student: Student;
+}) {
+  const attendance = attendanceOf(snapshot, column.session.id, student.id);
+  const present = attendance?.present;
+  const toggle = async () => {
+    const next = present === undefined ? true : present === true ? false : null;
+    await setAttendance({
+      subjectId: subject.id,
+      sessionId: column.session.id,
+      studentId: student.id,
+      present: next,
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => void toggle()}
+      aria-label={`Явка: ${student.name}, ${column.session.date}`}
+      title={present === true ? 'Был' : present === false ? 'Не был' : 'Не отмечено'}
+      className={`flex h-12 w-full items-center justify-center gap-1.5 transition-colors focus-ring ${
+        present === true
+          ? 'bg-moss-soft text-moss'
+          : present === false
+            ? 'bg-danger-soft text-danger'
+            : 'bg-surface text-faint hover:bg-elevated'
+      }`}
+    >
+      <span
+        className={`flex h-5 w-5 items-center justify-center rounded-full ${
+          present === true
+            ? 'bg-moss text-surface'
+            : present === false
+              ? 'bg-danger text-surface'
+              : 'border border-dashed border-line-strong text-faint'
+        }`}
+      >
+        <Icon
+          name={present === true ? 'check' : present === false ? 'close' : 'clock'}
+          size={10}
+        />
+      </span>
+      <span className="text-[9px] font-medium">
+        {present === true ? 'был' : present === false ? 'нет' : '—'}
+      </span>
+    </button>
+  );
+}
+
+function ScoreCell({
   snapshot,
   subject,
   column,
@@ -461,7 +603,6 @@ function Cell({
   student: Student;
 }) {
   const grade = gradeOf(snapshot, column.session.id, student.id);
-  const attendance = attendanceOf(snapshot, column.session.id, student.id);
   const [value, setValue] = useState(grade?.score != null ? String(grade.score) : '');
 
   useEffect(() => {
@@ -469,7 +610,6 @@ function Cell({
   }, [grade?.score]);
 
   const save = async () => {
-    if (column.attendanceOnly) return;
     const trimmed = value.trim().replace(',', '.');
     if (trimmed === '') {
       await setGrade({
@@ -494,101 +634,29 @@ function Cell({
     });
   };
 
-  const toggleAttendance = async () => {
-    const current = attendance?.present;
-    const next = current === undefined ? true : current === true ? false : null;
-    await setAttendance({
-      subjectId: subject.id,
-      sessionId: column.session.id,
-      studentId: student.id,
-      present: next,
-    });
-  };
-
-  const present = attendance?.present;
-
-  if (column.attendanceOnly) {
-    return (
-      <button
-        type="button"
-        onClick={() => void toggleAttendance()}
-        aria-label={`Явка: ${student.name}, ${column.session.date}`}
-        className="flex h-12 w-full items-center justify-center gap-1 px-1 transition-colors hover:bg-elevated/30 focus-ring"
-      >
-        <span
-          className={`flex h-5 w-5 items-center justify-center rounded-full ${
-            present === true
-              ? 'bg-moss text-surface'
-              : present === false
-                ? 'bg-danger text-surface'
-                : 'border border-dashed border-line-strong text-faint'
-          }`}
-        >
-          <Icon
-            name={present === true ? 'check' : present === false ? 'close' : 'clock'}
-            size={11}
-          />
-        </span>
-        <span
-          className={`text-[9px] font-medium ${
-            present === true ? 'text-moss' : present === false ? 'text-danger' : 'text-faint'
-          }`}
-        >
-          {present === true ? 'был' : present === false ? 'нет' : '—'}
-        </span>
-      </button>
-    );
-  }
-
   const band = scoreBand(value.trim() === '' ? null : Number(value.replace(',', '.')), column.max);
-  const bandTone = band ? GRADE_CLASSES[band.tone] : null;
+  const tone = band ? GRADE_CLASSES[band.tone] : null;
 
   return (
-    <div className="flex h-12 w-full">
-      <button
-        type="button"
-        onClick={() => void toggleAttendance()}
-        aria-label={`Посещаемость: ${student.name}, ${column.session.date}`}
-        className="flex w-[30px] shrink-0 items-center justify-center border-r border-line/50 transition-colors hover:bg-elevated/30 focus-ring"
-      >
-        <span
-          className={`flex h-5 w-5 items-center justify-center rounded-full ${
-            present === true
-              ? 'bg-moss text-surface'
-              : present === false
-                ? 'bg-danger text-surface'
-                : 'border border-dashed border-line-strong text-faint'
-          }`}
-        >
-          <Icon
-            name={present === true ? 'check' : present === false ? 'close' : 'clock'}
-            size={11}
-          />
-        </span>
-      </button>
-      <div className="flex min-w-0 flex-1 items-center justify-center">
-        <input
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onBlur={() => void save()}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
-          }}
-          inputMode="decimal"
-          placeholder="—"
-          aria-label={`Балл: ${student.name}, ${column.session.date}`}
-          className={`tnum h-9 w-8 border-0 bg-transparent p-0 text-center text-[12.5px] placeholder:text-faint focus:bg-elevated/70 focus:outline-none ${
-            bandTone ? bandTone.text : 'text-ink'
-          }`}
-        />
-        <span
-          className={`tnum w-2.5 shrink-0 text-[9px] font-semibold ${
-            bandTone?.text ?? 'text-transparent'
-          }`}
-        >
-          {band?.grade ?? ''}
-        </span>
-      </div>
+    <div className="flex h-12 w-full items-center justify-center gap-1 bg-surface">
+      <input
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
+        }}
+        inputMode="decimal"
+        placeholder="—"
+        aria-label={`Балл: ${student.name}, ${column.session.date}`}
+        className={`tnum h-9 w-9 border-0 bg-transparent p-0 text-right text-[13px] placeholder:text-faint focus:bg-elevated/70 focus:outline-none ${
+          tone ? tone.text : 'text-ink'
+        }`}
+      />
+      <span className="tnum w-7 text-left text-[9px] text-faint">/{column.max}</span>
+      <span className={`tnum w-3 text-center text-[9px] font-semibold ${tone?.text ?? 'text-transparent'}`}>
+        {band?.grade ?? ''}
+      </span>
     </div>
   );
 }
