@@ -53,7 +53,7 @@ export function SettingsScreen() {
       <div className="mt-3 rounded-card border border-line bg-surface px-4">
         <Switch
           label="Короткие названия предметов"
-          description="В списках — только первые буквы заглавными: «Веб-разработка» → «ВР»."
+          description="В списках — первые буквы всех слов с исходными пробелами и тире: «Веб-разработка» → «В-Р», «Базы данных» → «Б Д»."
           checked={settings.shortSubjectNames}
           onChange={(checked) => updateSettings({ shortSubjectNames: checked })}
         />
@@ -178,7 +178,7 @@ export function SettingsScreen() {
           <p className="text-[14.5px] font-medium text-ink">web-gradebook</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-dim">
             Офлайн-журнал преподавателя: предметы, группы, занятия, сессии, баллы и посещаемость.
-            Версия 0.11.0.
+            Версия 0.11.1.
           </p>
           <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">
             Данные хранятся на устройстве. Синхронизация и бэкап включаются отдельно. React, Vite,

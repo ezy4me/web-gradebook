@@ -359,8 +359,8 @@ try {
   await page.waitForTimeout(700);
   check(
     'предметы: короткие названия',
-    (await page.getByText('ВР', { exact: true }).count()) >= 1 &&
-      (await page.getByText('БД', { exact: true }).count()) >= 1,
+    (await page.getByText('В-Р', { exact: true }).count()) >= 1 &&
+      (await page.getByText('Б Д', { exact: true }).count()) >= 1,
   );
 
   // 14. Перенос по QR: входной экран и направления

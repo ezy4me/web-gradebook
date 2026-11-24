@@ -11,22 +11,31 @@ export function countLabel(count: number, one: string, few: string, many: string
 }
 
 /**
- * Инициалы предмета для компактного списка: «Веб-разработка» → «ВР»,
- * «Базы данных» → «БД». Служебные слова и предлоги не отбрасываем — преподаватель
- * узнаёт предмет по первым буквам, а не по эвристике.
+ * Инициалы предмета для компактного списка.
+ *
+ * Берём первые буквы всех слов, а разделители сохраняем: «Веб-разработка» → «В-Р»,
+ * «Базы данных» → «Б Д». Так короткое имя остаётся узнаваемым и не склеивается
+ * в нечитаемую аббревиатуру.
  */
-export function subjectInitials(name: string, max = 3): string {
+export function subjectInitials(name: string): string {
   const cleaned = name
-    .replace(/[«»"“”'’()\[\]`]/g, ' ')
+    .replace(/[«»"“”'’()\[\]`.,]/g, ' ')
     .replace(/[–—/]/g, ' ')
     .trim();
-  const words = cleaned.split(/[\s-]+/).filter(Boolean);
-  const letters = words
-    .map((word) => Array.from(word)[0] ?? '')
-    .filter(Boolean)
-    .join('')
-    .slice(0, max)
-    .toUpperCase();
-  if (letters) return letters;
-  return Array.from(name.trim()).slice(0, 2).join('').toUpperCase() || '—';
+  const tokens = cleaned.split(/(\s+|-)/);
+  let result = '';
+  for (const token of tokens) {
+    if (!token) continue;
+    if (/^\s+$/.test(token)) {
+      if (result && !result.endsWith(' ') && !result.endsWith('-')) result += ' ';
+      continue;
+    }
+    if (token === '-') {
+      if (result && !result.endsWith(' ') && !result.endsWith('-')) result += '-';
+      continue;
+    }
+    const letters = Array.from(token).filter((char) => /[\p{L}\p{N}]/u.test(char));
+    if (letters.length) result += letters[0].toUpperCase();
+  }
+  return result.trim().replace(/\s+/g, ' ').replace(/\s?-\s?/g, '-') || '—';
 }
