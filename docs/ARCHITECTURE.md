@@ -8,29 +8,26 @@
 ## 1. Общая картина
 
 ```
-                    ┌──────────────────────────────────────────────┐
-                    │ React UI (mobile-first, роутер HashRouter)   │
-                    │ экраны читают данные через useLiveQuery      │
-                    └───────────────┬──────────────────────────────┘
-                                    │ read / write
-                    ┌───────────────▼──────────────────────────────┐
-                    │ Dexie (IndexedDB) — источник истины для UI    │
-                    │ subjects / groups / subgroups / students /    │
-                    │ enrollments / activities / sessions /        │
-                    │ grades / attendance                           │
-                    └───────┬──────────────────────────┬───────────┘
-                            │ этап 2                   │ этап 3
-                    ┌───────▼─────────┐        ┌───────▼───────────┐
-                    │ mutation queue  │        │ debounce push     │
-                    │ → Supabase      │        │ → drivestash      │
-                    │   (Realtime +   │        │   (Google Drive,  │
-                    │    pull/push)   │        │    appDataFolder) │
-                    └───────┬─────────┘        └───────┬───────────┘
-                            │                          │
-                    ┌───────▼─────────┐        ┌───────▼───────────┐
-                    │ Postgres + RLS  │        │ 9 JSON-файлов     │
-                    │ auth.uid()=user │        │ (по типу записей) │
-                    └─────────────────┘        └───────────────────┘
+                  ┌──────────────────────────────────────────────┐
+                  │ React UI (mobile-first, роутер HashRouter)    │
+                  │ экраны читают данные через useLiveQuery       │
+                  └──────────────────┬───────────────────────────┘
+                                     │ read / write
+                  ┌──────────────────▼───────────────────────────┐
+                  │ Dexie (IndexedDB) — источник истины для UI    │
+                  │ subjects / groups / groupMembers / subgroups  │
+                  │ students / enrollments / activities /         │
+                  │ sessions / grades / attendance                │
+                  └───────┬───────────────────────────┬──────────┘
+                          │ этап 2                    │ этап 3
+                  ┌───────▼──────────┐      ┌─────────▼────────────┐
+                  │ dirty stores     │      │ debounce push        │
+                  │ pull / push      │      │ 10 JSON-файлов       │
+                  └───────┬──────────┘      └─────────┬────────────┘
+                  ┌───────▼──────────┐      ┌─────────▼────────────┐
+                  │ Postgres + RLS   │      │ Drive appDataFolder  │
+                  │ RPC sync_upsert  │      │                      │
+                  └──────────────────┘      └──────────────────────┘
 ```
 
 Ключевые инварианты:
@@ -74,6 +71,9 @@
 | `Activity.maxScore` | `activities.max_score` | `0` = наследовать шкалу предмета |
 | `Activity.autoRotate` | `activities.auto_rotate` | |
 | `ActivitySession.date` | `activity_sessions.date` | локальная дата `YYYY-MM-DD` |
+| `ActivitySession` / `Grade` / `Attendance` | `activity_sessions` / `grades` / `attendance` | имя стора `sessions` не совпадает с таблицей |
+| `GroupMember` | `group_members` | состав группы, отдельная таблица |
+| `Subgroup.index` | `subgroups.idx` | `index` — зарезервированное слово |
 | `Student.id` | `students.id` | студент глобальный, баллы раздельные |
 | `AppSettings` | не синхронизируется | тема и PIN локальны |
 
@@ -95,6 +95,7 @@
 ```
 web-gradebook:subjects
 web-gradebook:groups
+web-gradebook:groupMembers
 web-gradebook:subgroups
 web-gradebook:students
 web-gradebook:enrollments
@@ -135,16 +136,18 @@ web-gradebook:attendance
 
 ### Push
 
-1. Любой `put`/`delete` в Dexie ставит стор в очередь «грязных».
+1. Любая запись в Dexie помечает стор «грязным» (`localStorage`, отметка времени). Это делают
+   hooks таблиц, поэтому не важно, пришла запись из формы, импорта или `modify()`.
 2. Дебаунс 1.5–2 с на стор, затем читается весь текущий стор из Dexie.
-3. Файл собирается целиком (`records` отсортированы по `id`), сжимается DEFLATE
-   (`new CompressionStream('deflate-raw')`) и пишется поверх файла в `appDataFolder`.
+3. Файл собирается целиком (`records` отсортированы по `id`) и пишется поверх файла в
+   `appDataFolder` как обычный JSON (без сжатия — объём журнала небольшой, зато файл читается
+   глазами и не зависит от `CompressionStream`).
 4. Параллельные push одного стора сериализуются; последний выигрывает (LWW на уровне файла),
    поэтому при конфликте двух устройств побеждает тот, кто записал позже.
 
 ### Restore
 
-1. Прочитать все 9 файлов, распаковать `DecompressionStream('deflate-raw')`.
+1. Прочитать все 10 файлов (включая `web-gradebook:groupMembers`).
 2. Для каждой записи: если локальной нет или локальная `updatedAt` старее — записать.
 3. Показать сводку и предложить полный JSON-бэкап перед восстановлением.
 
@@ -157,50 +160,47 @@ web-gradebook:attendance
 
 ## 4. Синхронизация Supabase (этап 2)
 
-### Очередь мутаций
+### «Грязные» сторы вместо очереди
 
-Локальный стор `syncQueue` (Dexie v2, добавляется на этапе 2):
+Очередь на каждую запись оказалась лишней: у преподавателя тысячи строк, а не миллионы. Вместо
+Вместо `syncQueue` в `localStorage` хранится карта `{ store: timestamp }` (`src/sync/dirty.ts`):
 
-```ts
-interface Mutation {
-  seq: number;          // autoincrement
-  store: StoreName;     // subjects | … | attendance
-  recordId: string;
-  updatedAt: string;
-  createdAt: string;    // попытка, для backoff
-}
-```
+- hooks Dexie (`creating`/`updating`/`deleting`) помечают стор при любой точечной записи;
+- импорт, очистка и `modify()` дополнительно вызывают `markAllStoresDirty()`;
+- записи, пришедшие из облака, пишутся с подавлением отметок (`withoutDirtyTracking`), чтобы не
+  отправлять их обратно;
+- отметка снимается после успешного push, только если за время отправки стор не изменился снова.
 
-Все мутации из `src/db/repo.ts` уже пишут `updatedAt` — на этапе 2 к ним добавляется постановка
-в очередь в той же транзакции Dexie.
+Преимущества: не теряются bulk-операции, не нужна отдельная транзакция на каждую мутацию, а
+повторная отправка стора идемпотентна.
 
 ### Push
 
-1. Триггеры: `online`, `visibilitychange → visible`, интервал 30 с, после каждой мутации (дебаунс 1 с).
-2. Пачка до 200 мутаций: сгруппировать по сторам, прочитать актуальные записи из Dexie.
-3. `upsert` в Supabase (`on conflict (id) do update`) с `updated_at` из записи.
-4. Успех — удалить мутации из очереди; ошибка — экспоненциальный backoff (1, 2, 4 … 60 с),
-   ошибки авторизации останавливают движок до перелогина.
+1. Триггеры: `online`, `visibilitychange → visible`, `focus`, интервал 45 с, ручная кнопка.
+2. Для каждого грязного стора читаются все актуальные записи (включая tombstones) и пачками по
+   200 отправляются в RPC `sync_upsert(p_table, p_rows)`.
+3. RPC сам сравнивает `excluded.updated_at > target.updated_at`: более старая версия не перетирает
+   новую. Это закрывает гонку между устройствами, даже если push и pull пересеклись.
+4. Ошибка оставляет отметку грязного стора; следующая попытка отправит его снова.
 
 ### Pull
 
-1. Хранится `lastPulledAt` (ISO) в `syncMeta`.
-2. Для каждого стора: `select * where updated_at > lastPulledAt order by updated_at asc limit 500`
-   (пагинация по `updated_at`, `id`).
-3. Применение — LWW по `updatedAt`: локально более новая запись не перетирается, но её мутация
-   останется в очереди и уйдёт на сервер следующим push.
-4. Tombstone (`deleted_at`) применяется как soft-delete локально.
-5. Realtime-подписка (`postgres_changes`) — опциональное ускорение; корректность обеспечивает pull.
+1. Полный pull без watermark: для каждого стора `select * order by updated_at, id` с пагинацией
+   по 1000 строк. Учебный журнал небольшой, зато не теряются обновления при расхождении часов и
+   при равных `updated_at` на границе страницы.
+2. Применение — LWW по `updatedAt`: локально более новая запись не перетирается и уйдёт следующим
+   push. Tombstone (`deleted_at`) применяется как soft-delete.
+3. Realtime-подписка не используется: корректность обеспечивает pull по таймеру и при возврате
+   в приложение.
 
 ### Конфликты и порядок
 
-- LWW по `updatedAt` (UTC ISO с миллисекундами).
-- Часы устройств могут расходиться: при расхождении > 2 минут показывается предупреждение
-  в настройках синхронизации; серверный `updated_at` из триггера используется как арбитр
-  при равных клиентских значениях.
-- Ссылочная целостность: push идёт в порядке `subjects → groups → subgroups → students →
-  enrollments → activities → sessions → grades → attendance`; pull — в обратном для удалений
-  не требуется (soft-delete), но порядок применения тот же.
+- LWW по `updatedAt` (UTC ISO с миллисекундами). Триггер `touch_updated_at` больше не перезаписывает
+  клиентское время, а только заполняет пропуск.
+- Порядок применения: `subjects → groups → groupMembers → subgroups → students → enrollments →
+  activities → sessions → grades → attendance`; для soft-delete обратный порядок не нужен.
+- Мягкая очистка базы и режим «Заменить» в импорте ставят tombstone, а не `clear()`, чтобы удаление
+  уехало в облако и не вернулось следующим pull.
 
 ### Keep-alive
 
@@ -266,6 +266,10 @@ Supabase, и все запросы к таблицам идут под RLS `auth
   не используется; по истечении — повторный `requestAccessToken`;
 - кнопка «Подключить Google Drive» в настройках, отключение — удаление токена;
 - при `error`/`offline` бэкап просто откладывается, UI показывает статус.
+
+Реализация — `src/drive/google.ts`: GIS загружается динамически, токен и срок жизни лежат в
+`sessionStorage`, `forgetDriveToken()` отключает доступ на устройстве. Файлы — обычный JSON,
+по одному на стор; создание идёт multipart-загрузкой, обновление — `PATCH uploadType=media`.
 
 ---
 
@@ -420,9 +424,11 @@ completion = выставленные / ожидаемые × 100
 | :--- | :--- | :--- |
 | 1 | Dexie, все экраны, сессии, баллы, посещаемость, дедлайны, статистика, JSON-бэкап, PIN, темы, PWA, импорт расписания | **готово** |
 | 1.1 | группы как сущность (`groupMembers`), зачисление группы в несколько предметов, шкала 2–5 с цветом, импорт студентов v2 | **готово** |
-| 2 | Supabase: Edge Function «Яндекс ID», mutation queue, push/pull, Realtime, индикатор синка | схема и потоки готовы |
-| 3 | Google Drive через `drivestash`: подключение, дебаунс-push, восстановление, статусы | схема и потоки готовы |
-| 4 | Экспорт `.xlsx` (SheetJS), keep-alive workflow, полировка UI, e2e-проверки | частично: keep-alive workflow и e2e добавлены, `.xlsx` — нет |
+| 2 | Supabase: Edge Function «Яндекс ID», грязные сторы, pull/push, RPC `sync_upsert`, статус синка | **готово** (нужны ключи проекта) |
+| 3 | Google Drive через `drivestash`: подключение, дебаунс-push, восстановление, статусы | **готово** (нужен `VITE_GOOGLE_CLIENT_ID`) |
+| 4 | Экспорт `.xlsx`, keep-alive workflow, полировка UI, e2e-проверки | **готово**: XLSX-генератор без зависимостей, e2e 54 проверки |
+
+Подключение облака описано в [`docs/SETUP_CLOUD.md`](SETUP_CLOUD.md).
 
 Дизайн-система версии 0.2 описана в `docs/DESIGN.md`: токены, типографика, поток «группа → вид
 занятия», безопасность массовых действий.

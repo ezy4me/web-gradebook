@@ -2,6 +2,7 @@ import { type Table } from 'dexie';
 import { db } from './db';
 import type { BackupFile } from './types';
 import { newId, nowIso } from '../lib/date';
+import { markAllStoresDirty } from '../sync/dirty';
 
 const FORMAT = 'web-gradebook-backup';
 
@@ -130,7 +131,7 @@ export interface ImportResult {
  * - merge: last-write-wins по `updatedAt` (совпадающие id), новые записи добавляются.
  */
 export async function importBackup(backup: BackupFile, mode: ImportMode): Promise<ImportResult> {
-  type SnapshotTable = Table<{ id: string; updatedAt: string }>;
+  type SnapshotTable = Table<{ id: string; updatedAt: string; deletedAt?: string | null }>;
   const pairs: { key: keyof BackupFile['data']; table: SnapshotTable }[] = [
     { key: 'subjects', table: db.subjects as unknown as SnapshotTable },
     { key: 'groups', table: db.groups as unknown as SnapshotTable },
@@ -151,7 +152,11 @@ export async function importBackup(backup: BackupFile, mode: ImportMode): Promis
 
   await db.transaction('rw', tables, async () => {
     if (mode === 'replace') {
-      await Promise.all(tables.map((table) => table.clear()));
+      // Не clear(): tombstone нужен, чтобы удаление уехало в облако.
+      const stamp = nowIso();
+      await Promise.all(
+        tables.map((table) => table.toCollection().modify({ deletedAt: stamp, updatedAt: stamp })),
+      );
     }
     for (const { key, table } of pairs) {
       const rows = backup.data[key];
@@ -161,12 +166,15 @@ export async function importBackup(backup: BackupFile, mode: ImportMode): Promis
           skipped += 1;
           continue;
         }
-        const existing = mode === 'merge' ? await table.get(row.id) : undefined;
-        if (existing) {
+        const existing = await table.get(row.id);
+        if (existing && mode === 'merge') {
           if ((existing.updatedAt ?? '') >= (row.updatedAt ?? '')) {
             skipped += 1;
             continue;
           }
+          updated += 1;
+        } else if (existing) {
+          // replace: файл — источник истины, tombstone не мешает воскресить запись.
           updated += 1;
         } else {
           added += 1;
@@ -177,6 +185,7 @@ export async function importBackup(backup: BackupFile, mode: ImportMode): Promis
   });
 
   await deriveMembershipsFromEnrollments();
+  markAllStoresDirty();
 
   return { added, updated, skipped };
 }

@@ -14,8 +14,12 @@ import {
   useToast,
 } from '../components/ui';
 import { Icon } from '../components/icons';
+import { SyncSheet } from '../components/SyncSheet';
+import { DriveSheet } from '../components/DriveSheet';
 import { clearPin, setPin, updateSettings, useSettings, verifyPin } from '../lib/settings';
 import type { ThemeMode } from '../db/types';
+import { phaseLabel, useSyncState } from '../sync/state';
+import { driveStatusLabel, useDriveState } from '../drive/state';
 
 type PinMode = 'set' | 'change' | 'disable';
 
@@ -24,6 +28,10 @@ export function SettingsScreen() {
   const navigate = useNavigate();
   const toast = useToast();
   const [pinMode, setPinMode] = useState<PinMode | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [driveOpen, setDriveOpen] = useState(false);
+  const sync = useSyncState();
+  const drive = useDriveState();
 
   return (
     <Page title="Настройки" subtitle="вид, доступ и данные">
@@ -88,8 +96,62 @@ export function SettingsScreen() {
       <SectionTitle>Данные</SectionTitle>
       <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
         <Row label="Экспорт и импорт" hint="Полный бэкап JSON, восстановление, очистка" onClick={() => navigate('/data')} />
-        <Row label="Google Drive" hint="Резервная копия в appDataFolder" right={<Badge tone="warn">этап 3</Badge>} />
-        <Row label="Supabase" hint="Синхронизация через Яндекс ID" right={<Badge tone="warn">этап 2</Badge>} />
+        <Row
+          label="Google Drive"
+          hint={
+            drive.configured
+              ? drive.lastBackupAt
+                ? 'Резервная копия в appDataFolder'
+                : 'Резервная копия журнала'
+              : 'Не настроено: нужен VITE_GOOGLE_CLIENT_ID'
+          }
+          onClick={() => setDriveOpen(true)}
+          right={
+            <Badge
+              tone={
+                !drive.configured
+                  ? 'neutral'
+                  : drive.status === 'error'
+                    ? 'danger'
+                    : drive.status === 'expired'
+                      ? 'warn'
+                      : drive.status === 'connected' || drive.status === 'syncing'
+                        ? 'success'
+                        : 'accent'
+              }
+            >
+              {drive.configured ? driveStatusLabel(drive.status) : 'не настроено'}
+            </Badge>
+          }
+        />
+        <Row
+          label="Supabase"
+          hint={
+            sync.configured
+              ? sync.signedIn
+                ? `Яндекс ID · ${sync.email ?? 'аккаунт'}`
+                : 'Синхронизация между устройствами'
+              : 'Не настроено: нужны ключи сборки'
+          }
+          onClick={() => setSyncOpen(true)}
+          right={
+            <Badge
+              tone={
+                !sync.configured
+                  ? 'neutral'
+                  : sync.phase === 'error'
+                    ? 'danger'
+                    : sync.phase === 'offline'
+                      ? 'warn'
+                      : sync.signedIn
+                        ? 'success'
+                        : 'accent'
+              }
+            >
+              {sync.configured ? (sync.signedIn ? phaseLabel(sync.phase) : 'войти') : 'не настроено'}
+            </Badge>
+          }
+        />
       </div>
 
       <SectionTitle>О приложении</SectionTitle>
@@ -101,14 +163,17 @@ export function SettingsScreen() {
           <p className="text-[14.5px] font-medium text-ink">web-gradebook</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-dim">
             Офлайн-журнал преподавателя: предметы, группы, занятия, сессии, баллы и посещаемость.
-            Версия 0.7.0.
+            Версия 0.8.0.
           </p>
           <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">
-            Данные не покидают устройство. React, Vite, Dexie, Tailwind. Сделано для работы одной рукой
-            на паре.
+            Данные хранятся на устройстве. Синхронизация и бэкап включаются отдельно. React, Vite,
+            Dexie, Tailwind.
           </p>
         </div>
       </div>
+
+      <SyncSheet open={syncOpen} onClose={() => setSyncOpen(false)} />
+      <DriveSheet open={driveOpen} onClose={() => setDriveOpen(false)} />
 
       <PinSheet
         mode={pinMode}

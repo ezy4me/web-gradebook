@@ -5,6 +5,17 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: '/web-gradebook/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          dexie: ['dexie', 'dexie-react-hooks'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

@@ -15,6 +15,7 @@ import {
   type Subgroup,
 } from './types';
 import { newId, nowIso } from '../lib/date';
+import { markStoreDirty } from '../sync/dirty';
 
 const meta = () => ({ createdAt: nowIso(), updatedAt: nowIso(), deletedAt: null });
 
@@ -436,6 +437,7 @@ export async function createSessionsBulk(items: SessionInput[]): Promise<number>
     deletedAt: null,
   }));
   await db.sessions.bulkAdd(records);
+  markStoreDirty('sessions');
   return records.length;
 }
 

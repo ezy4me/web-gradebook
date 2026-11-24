@@ -31,7 +31,7 @@ create table if not exists public.subjects (
   user_id         uuid not null references auth.users (id) on delete cascade,
   name            text not null,
   scale_max       numeric(8, 2) not null default 100,
-  pass_threshold  numeric(5, 2) not null default 60,
+  pass_threshold  numeric(5, 2) not null default 51,
   scale_kind      text not null default 'points' check (scale_kind in ('points', 'pass-fail')),
   enabled_types   text[] not null default array['lecture', 'practice', 'lab'],
   type_weights    jsonb not null default '{"lecture":1,"practice":1,"lab":2}'::jsonb,
@@ -71,7 +71,7 @@ create unique index if not exists subgroups_subject_group_idx_key
   where deleted_at is null;
 
 -- ---------------------------------------------------------------------------
--- Студенты (глобальная сущность) и зачисления
+-- Студенты (глобальная сущность) и состав групп
 -- ---------------------------------------------------------------------------
 create table if not exists public.students (
   id         uuid primary key default gen_random_uuid(),
@@ -82,6 +82,23 @@ create table if not exists public.students (
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
 );
+
+-- Состав группы не зависит от предмета: студент добавляется один раз.
+create table if not exists public.group_members (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  group_id   uuid not null references public.groups (id) on delete cascade,
+  student_id uuid not null references public.students (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create unique index if not exists group_members_group_student_key
+  on public.group_members (group_id, student_id)
+  where deleted_at is null;
+create index if not exists group_members_student_idx
+  on public.group_members (student_id);
 
 create table if not exists public.enrollments (
   id          uuid primary key default gen_random_uuid(),
@@ -188,6 +205,7 @@ create index if not exists subjects_user_updated_idx on public.subjects (user_id
 create index if not exists groups_user_updated_idx on public.groups (user_id, updated_at);
 create index if not exists subgroups_user_updated_idx on public.subgroups (user_id, updated_at);
 create index if not exists students_user_updated_idx on public.students (user_id, updated_at);
+create index if not exists group_members_user_updated_idx on public.group_members (user_id, updated_at);
 create index if not exists enrollments_user_updated_idx on public.enrollments (user_id, updated_at);
 create index if not exists activities_user_updated_idx on public.activities (user_id, updated_at);
 create index if not exists activity_sessions_user_updated_idx on public.activity_sessions (user_id, updated_at);
@@ -202,7 +220,9 @@ returns trigger
 language plpgsql
 as $$
 begin
-  new.updated_at := now();
+  -- Клиент присылает свой updated_at: именно он разрешает конфликты LWW.
+  -- Триггер лишь заполняет пропуск, а не перезаписывает клиентское время.
+  new.updated_at := coalesce(new.updated_at, now());
   return new;
 end;
 $$;
@@ -212,7 +232,7 @@ declare
   t text;
 begin
   foreach t in array array[
-    'profiles', 'subjects', 'groups', 'subgroups', 'students', 'enrollments',
+    'profiles', 'subjects', 'groups', 'subgroups', 'students', 'group_members', 'enrollments',
     'activities', 'activity_sessions', 'grades', 'attendance'
   ]
   loop
@@ -255,6 +275,7 @@ alter table public.subjects enable row level security;
 alter table public.groups enable row level security;
 alter table public.subgroups enable row level security;
 alter table public.students enable row level security;
+alter table public.group_members enable row level security;
 alter table public.enrollments enable row level security;
 alter table public.activities enable row level security;
 alter table public.activity_sessions enable row level security;
@@ -262,8 +283,10 @@ alter table public.grades enable row level security;
 alter table public.attendance enable row level security;
 
 -- profiles: ключ — id, а не user_id
+drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles
   for select using (auth.uid() = id);
+drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own" on public.profiles
   for update using (auth.uid() = id) with check (auth.uid() = id);
 
@@ -273,7 +296,7 @@ declare
   t text;
 begin
   foreach t in array array[
-    'subjects', 'groups', 'subgroups', 'students', 'enrollments',
+    'subjects', 'groups', 'subgroups', 'students', 'group_members', 'enrollments',
     'activities', 'activity_sessions', 'grades', 'attendance'
   ]
   loop
@@ -299,11 +322,53 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- LWW-upsert для клиентской синхронизации (RPC sync_upsert)
+-- ---------------------------------------------------------------------------
+-- Клиент присылает пачку строк в camelCase→snake_case-маппинге. Функция
+-- обновляет строку, только если версия клиента новее; иначе тихо пропускает.
+-- Это защищает от «старое устройство перезаписало новое».
+create or replace function public.sync_upsert(p_table text, p_rows jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  set_list text;
+begin
+  if p_table not in (
+    'subjects', 'groups', 'group_members', 'subgroups', 'students', 'enrollments',
+    'activities', 'activity_sessions', 'grades', 'attendance'
+  ) then
+    raise exception 'sync_upsert: неизвестная таблица %', p_table;
+  end if;
+
+  select string_agg(format('%I = excluded.%I', column_name, column_name), ', ')
+    into set_list
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = p_table
+    and column_name not in ('id', 'user_id', 'created_at');
+
+  execute format(
+    'insert into public.%I as target
+       select * from jsonb_populate_recordset(null::public.%I, $1)
+     on conflict (id) do update set %s
+     where excluded.user_id = auth.uid()
+       and excluded.updated_at > target.updated_at',
+    p_table, p_table, set_list
+  ) using p_rows;
+end;
+$$;
+
+grant execute on function public.sync_upsert(text, jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Пример запроса из приложения (pull):
 --   select * from activity_sessions
---    where user_id = auth.uid() and updated_at > :last_pulled_at
---    order by updated_at asc;
--- Push выполняется через upsert по id с проверкой updated_at (LWW на клиенте).
+--    where user_id = auth.uid()
+--    order by updated_at asc, id asc;
+-- Push выполняется через RPC sync_upsert с проверкой updated_at (LWW на сервере).
 --
 -- Пример RLS-проверки:
 --   set local role authenticated;

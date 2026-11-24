@@ -5,6 +5,14 @@ import { applyTheme, getSettings } from './lib/settings';
 import './index.css';
 
 applyTheme(getSettings().theme);
+// Облачные модули — отдельными чанками и только при наличии ключей:
+// офлайн-ядро не должно тяжелеть из-за Supabase/Google.
+if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+  void import('./sync/engine').then((module) => module.initSync());
+}
+if (import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+  void import('./drive/backup').then((module) => module.initDrive());
+}
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Не найден корневой элемент #root');

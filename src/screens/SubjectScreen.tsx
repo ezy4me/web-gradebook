@@ -47,6 +47,7 @@ import {
   subjectOverview,
   type Snapshot,
 } from '../domain/grading';
+import { downloadSubjectXlsx, excelSummaryLabel } from '../domain/excel';
 import { activityDeadline } from '../domain/schedule';
 import { deadlineState, formatDateCompact, formatDateShort, relativeDeadline, todayIso } from '../lib/date';
 import { countLabel } from '../lib/text';
@@ -138,7 +139,23 @@ export function SubjectScreen() {
       subtitle={subtitle}
       back
       backTo="/"
-      actions={<IconButton icon="settings" label="Настройки предмета" onClick={() => setSettingsOpen(true)} />}
+      actions={
+        <>
+          <IconButton
+            icon="download"
+            label="Экспорт в Excel"
+            onClick={() => {
+              try {
+                const result = downloadSubjectXlsx(snapshot, subject.id, activeGroup?.id);
+                toast(`${excelSummaryLabel(result)} — скачано`);
+              } catch (error) {
+                toast(error instanceof Error ? error.message : 'Не удалось собрать Excel', 'danger');
+              }
+            }}
+          />
+          <IconButton icon="settings" label="Настройки предмета" onClick={() => setSettingsOpen(true)} />
+        </>
+      }
       padded={false}
     >
       <div className="mx-auto w-full max-w-app px-5 pt-3 lg:px-8">

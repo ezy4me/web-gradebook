@@ -26,6 +26,11 @@ import {
 } from '../db/backup';
 import { wipeDatabase } from '../db/db';
 import { seedDemoData } from '../db/seed';
+import { downloadJournalXlsx, excelSummaryLabel } from '../domain/excel';
+import { SyncSheet } from '../components/SyncSheet';
+import { DriveSheet } from '../components/DriveSheet';
+import { phaseLabel, useSyncState } from '../sync/state';
+import { driveStatusLabel, useDriveState } from '../drive/state';
 import {
   defaultStartYear,
   importSchedule,
@@ -49,6 +54,11 @@ export function DataScreen() {
   const [mode, setMode] = useState<ImportMode>('merge');
   const [importing, setImporting] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [driveOpen, setDriveOpen] = useState(false);
+  const sync = useSyncState();
+  const drive = useDriveState();
   const [confirmWipe, setConfirmWipe] = useState(false);
   const [schedule, setSchedule] = useState<{ text: string; name: string } | null>(null);
   const [scheduleYear, setScheduleYear] = useState(String(defaultStartYear()));
@@ -206,6 +216,26 @@ export function DataScreen() {
           Импортировать бэкап
         </Button>
         <Button
+          icon="grid"
+          variant="soft"
+          full
+          size="lg"
+          disabled={exportingXlsx || (counts?.subjects ?? 0) === 0}
+          onClick={() => {
+            setExportingXlsx(true);
+            try {
+              const result = downloadJournalXlsx(snapshot);
+              toast(`${excelSummaryLabel(result)} — скачано`);
+            } catch (error) {
+              toast(error instanceof Error ? error.message : 'Не удалось собрать Excel', 'danger');
+            } finally {
+              setExportingXlsx(false);
+            }
+          }}
+        >
+          {exportingXlsx ? 'Собираем книгу…' : 'Скачать журнал Excel'}
+        </Button>
+        <Button
           icon="download"
           variant="soft"
           full
@@ -237,7 +267,8 @@ export function DataScreen() {
         <p className="pt-1 text-[12px] leading-relaxed text-faint">
           Уже есть бэкап этого приложения с другого устройства? Импортируйте его — предметы, занятия,
           оценки и посещаемость восстановятся. В бэкап входят все данные, кроме PIN и темы. Пример
-          бэкапа можно скачать, заполнить своими данными и загрузить обратно.
+          бэкапа можно скачать, заполнить своими данными и загрузить обратно. Excel-книга — для
+          печати и отчёта: сводка по группам и отдельный лист на каждый предмет.
         </p>
       </div>
 
@@ -323,13 +354,59 @@ export function DataScreen() {
       <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
         <Row
           label="Supabase"
-          hint="Между устройствами, вход через Яндекс ID"
-          right={<Badge tone="warn">этап 2</Badge>}
+          hint={
+            sync.configured
+              ? sync.signedIn
+                ? `Яндекс ID · ${sync.email ?? 'аккаунт'}`
+                : 'Вход через Яндекс ID'
+              : 'Не настроено: нужны ключи сборки'
+          }
+          onClick={() => setSyncOpen(true)}
+          right={
+            <Badge
+              tone={
+                !sync.configured
+                  ? 'neutral'
+                  : sync.phase === 'error'
+                    ? 'danger'
+                    : sync.phase === 'offline'
+                      ? 'warn'
+                      : sync.signedIn
+                        ? 'success'
+                        : 'accent'
+              }
+            >
+              {sync.configured ? (sync.signedIn ? phaseLabel(sync.phase) : 'войти') : 'не настроено'}
+            </Badge>
+          }
         />
         <Row
           label="Google Drive"
-          hint="Резервная копия в appDataFolder"
-          right={<Badge tone="warn">этап 3</Badge>}
+          hint={
+            drive.configured
+              ? drive.lastBackupAt
+                ? 'Резервная копия в appDataFolder'
+                : 'Резервная копия журнала'
+              : 'Не настроено: нужен VITE_GOOGLE_CLIENT_ID'
+          }
+          onClick={() => setDriveOpen(true)}
+          right={
+            <Badge
+              tone={
+                !drive.configured
+                  ? 'neutral'
+                  : drive.status === 'error'
+                    ? 'danger'
+                    : drive.status === 'expired'
+                      ? 'warn'
+                      : drive.status === 'connected' || drive.status === 'syncing'
+                        ? 'success'
+                        : 'accent'
+              }
+            >
+              {drive.configured ? driveStatusLabel(drive.status) : 'не настроено'}
+            </Badge>
+          }
         />
       </div>
 
@@ -356,6 +433,9 @@ export function DataScreen() {
           Очистить локальную базу
         </button>
       </div>
+
+      <SyncSheet open={syncOpen} onClose={() => setSyncOpen(false)} />
+      <DriveSheet open={driveOpen} onClose={() => setDriveOpen(false)} />
 
       <ConfirmSheet
         open={confirmWipe}

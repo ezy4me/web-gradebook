@@ -12,6 +12,7 @@ import type {
   Subgroup,
 } from './types';
 import { newId, nowIso } from '../lib/date';
+import { markAllStoresDirty, markStoreDirty, STORE_ORDER } from '../sync/dirty';
 
 /**
  * Локальная база (IndexedDB / Dexie) — единственный источник истины для UI.
@@ -69,29 +70,43 @@ export class GradebookDB extends Dexie {
         }
         if (rows.length) await tx.table('groupMembers').bulkAdd(rows);
       });
+
+    // Любая точечная запись помечает стор грязным для Supabase/Drive.
+    for (const store of STORE_ORDER) {
+      const table = (this as unknown as Record<string, Table<{ id: string }>>)[store];
+      if (!table) continue;
+      table.hook('creating', () => markStoreDirty(store));
+      table.hook('updating', () => markStoreDirty(store));
+      table.hook('deleting', () => markStoreDirty(store));
+    }
   }
 }
 
 export const db = new GradebookDB();
 
-/** Полная очистка локальной базы (используется в настройках). */
+/**
+ * Очистка локальной базы. Физически строки не удаляем: ставим tombstone,
+ * чтобы удаление уехало в облако и не вернулось следующим pull.
+ */
 export async function wipeDatabase(): Promise<void> {
+  const stamp = nowIso();
   await db.transaction(
     'rw',
     [db.subjects, db.groups, db.groupMembers, db.subgroups, db.students, db.enrollments, db.activities, db.sessions, db.grades, db.attendance],
     async () => {
       await Promise.all([
-        db.subjects.clear(),
-        db.groups.clear(),
-        db.groupMembers.clear(),
-        db.subgroups.clear(),
-        db.students.clear(),
-        db.enrollments.clear(),
-        db.activities.clear(),
-        db.sessions.clear(),
-        db.grades.clear(),
-        db.attendance.clear(),
+        db.subjects.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.groups.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.groupMembers.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.subgroups.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.students.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.enrollments.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.activities.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.sessions.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.grades.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
+        db.attendance.toCollection().modify({ deletedAt: stamp, updatedAt: stamp }),
       ]);
     },
   );
+  markAllStoresDirty();
 }

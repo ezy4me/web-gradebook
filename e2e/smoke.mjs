@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Дымовой e2e-тест web-gradebook.
  *
  * Требуется запущенный dev/preview сервер и установленный Chromium-браузер:
@@ -6,7 +6,7 @@
  *   npm run test:e2e
  */
 import { chromium } from 'playwright';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 
 const BASE = process.env.E2E_BASE ?? 'http://127.0.0.1:5173/web-gradebook/';
 const SHOTS = '.verify/e2e';
@@ -202,6 +202,18 @@ try {
   const backup = JSON.parse(readFileSync(backupPath, 'utf8'));
   check('экспорт: формат', backup.format === 'web-gradebook-backup' && backup.version === 2);
   check('экспорт: данные', backup.data.subjects.length === 2 && backup.data.students.length === 42);
+
+  const [xlsxDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Скачать журнал Excel' }).click(),
+  ]);
+  const xlsxPath = '.verify/e2e-journal.xlsx';
+  await xlsxDownload.saveAs(xlsxPath);
+  check(
+    'экспорт: Excel-книга',
+    xlsxDownload.suggestedFilename().endsWith('.xlsx') && statSync(xlsxPath).size > 8000,
+    xlsxDownload.suggestedFilename(),
+  );
 
   // 8. Импорт расписания: пример вставкой JSON
   await page.getByRole('button', { name: 'Вставить JSON' }).first().click();

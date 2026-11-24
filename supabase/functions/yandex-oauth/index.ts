@@ -1,8 +1,8 @@
 // ============================================================================
-// yandex-oauth — Supabase Edge Function (СХЕМА ЭТАПА 2, к UI ещё не подключена)
+// yandex-oauth — Supabase Edge Function (этап 2, подключена к клиенту)
 // ============================================================================
-// Зачем: hosted Supabase не позволяет зарегистрировать Яндекс как OAuth-провайдера,
-// а Яндекс ID не отдаёт OIDC-дискавери. Функция выступает брокером:
+// Брокер входа: hosted Supabase не умеет Яндекс как OAuth-провайдера,
+// а Яндекс ID не отдаёт OIDC-дискавери.
 //   1) /start    — state + PKCE, редирект на oauth.yandex.ru;
 //   2) /callback — обмен code на токен, чтение профиля, создание/поиск пользователя
 //                  Supabase через admin API и возврат одноразового token_hash.
@@ -221,7 +221,5 @@ Deno.serve(async (request) => {
   return json({ error: 'not_found' }, 404);
 });
 
-// Осталось сделать на этапе 2 (здесь только брокер):
-//   * клиентский маршрут #/auth: supabase.auth.verifyOtp({ token_hash, type: 'magiclink' });
-//   * mutation queue и pull/push (docs/ARCHITECTURE.md, раздел 4);
-//   * таблица oauth_states — если понадобится серверный nonce вместо подписи state.
+// Клиент: src/screens/AuthScreen.tsx завершает вход через verifyOtp.
+// Синхронизация: src/sync/engine.ts (pull/push, RPC sync_upsert в schema.sql).
