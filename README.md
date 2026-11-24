@@ -9,8 +9,8 @@
 - Стек: React 18 + Vite + TypeScript, Dexie (IndexedDB), Tailwind CSS 4, `lucide-react`, `vite-plugin-pwa`.
 - Данные не покидают устройство: единственный источник истины — IndexedDB.
 - Интерфейс на русском, две темы, mobile-first, без эмодзи и градиентов.
-- Дизайн — редакционный журнал: Literata + Golos Text, бумага и чернила, глина/мох/сталь для
-  подгрупп. Подробности и токены — [docs/DESIGN.md](docs/DESIGN.md).
+- Дизайн — редакционный журнал: Literata + Golos Text, бумага и чернила, синий/сливовый/бирюзовый
+  для подгрупп. Подробности и токены — [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Быстрый старт
 

@@ -234,12 +234,14 @@ export function JournalTable({
               >
                 Студент
               </th>
-              {current.activities.map((activity) => (
+              {current.activities.map((activity, activityIndex) => (
                 <th
                   key={activity.activity.id}
                   colSpan={activity.sessions.length}
                   title={activity.activity.title}
-                  className="sticky top-0 z-20 h-9 border-b border-r border-line bg-elevated px-2 py-1 text-left text-[11px] font-medium text-ink"
+                  className={`sticky top-0 z-20 h-9 border-b border-line bg-elevated px-2 py-1 text-center text-[11px] font-medium text-ink ${
+                    activityIndex === current.activities.length - 1 ? 'border-r' : ''
+                  }`}
                 >
                   <span className="block truncate">{activity.activity.title}</span>
                 </th>
@@ -253,15 +255,16 @@ export function JournalTable({
             </tr>
             <tr>
               {current.activities.flatMap((activity) =>
-                activity.sessions.map((column) => {
+                activity.sessions.map((column, sessionIndex) => {
                   const tone = subgroupTone(column.subgroupIndex);
+                  const lastInActivity = sessionIndex === activity.sessions.length - 1;
                   return (
                     <th
                       key={column.session.id}
                       title={`${TYPE_LABEL[current.type].one} · ${column.subgroupName ?? 'вся группа'}`}
-                      className={`sticky top-9 z-20 min-w-[72px] border-b border-r border-line px-1 py-1 text-center align-middle font-normal ${
+                      className={`sticky top-9 z-20 min-w-[80px] border-b border-line px-1 py-1 text-center align-middle font-normal ${
                         column.subgroupName ? tone.cell : 'bg-elevated'
-                      }`}
+                      } ${lastInActivity ? 'border-r' : ''}`}
                     >
                       <span className="tnum block text-[11px] font-medium text-ink">
                         {formatDateShort(column.session.date)}
@@ -290,7 +293,7 @@ export function JournalTable({
                   <th
                     scope="row"
                     title={row.subgroupName ?? 'вся группа'}
-                    className={`sticky left-0 z-10 h-10 border-b border-r border-line px-2 text-left font-normal ${
+                    className={`sticky left-0 z-10 h-11 border-b border-r border-line px-2 text-left font-normal ${
                       row.subgroupIndex ? `${tone.cell} border-l-2 ${tone.border}` : 'bg-surface'
                     }`}
                   >
@@ -309,20 +312,21 @@ export function JournalTable({
                   </th>
 
                   {current.activities.flatMap((activity) =>
-                    activity.sessions.map((column) => {
+                    activity.sessions.map((column, sessionIndex) => {
                       const applies =
                         column.session.subgroupId == null ||
                         (row.subgroupId != null && row.subgroupId === column.session.subgroupId);
+                      const lastInActivity = sessionIndex === activity.sessions.length - 1;
                       return (
                         <td
                           key={column.session.id}
-                          className={`border-b border-r border-line p-0 ${
+                          className={`h-11 border-b border-line p-0 ${
                             applies
                               ? row.subgroupIndex
                                 ? tone.cell
                                 : 'bg-surface'
                               : 'bg-elevated/30'
-                          }`}
+                          } ${lastInActivity ? 'border-r' : ''}`}
                         >
                           {applies ? (
                             <Cell
@@ -332,7 +336,7 @@ export function JournalTable({
                               student={row.student}
                             />
                           ) : (
-                            <span className="block h-10" />
+                            <span className="block h-11" />
                           )}
                         </td>
                       );
@@ -369,7 +373,8 @@ export function JournalTable({
                 Итого
               </th>
               {current.activities.flatMap((activity) =>
-                activity.sessions.map((column) => {
+                activity.sessions.map((column, sessionIndex) => {
+                  const lastInActivity = sessionIndex === activity.sessions.length - 1;
                   const total = students.filter(
                     (row) =>
                       column.session.subgroupId == null ||
@@ -395,7 +400,9 @@ export function JournalTable({
                   return (
                     <td
                       key={column.session.id}
-                      className="sticky bottom-0 z-10 border-r border-t border-line bg-elevated px-1 py-1.5 text-center"
+                      className={`sticky bottom-0 z-10 border-t border-line bg-elevated px-1 py-1.5 text-center ${
+                        lastInActivity ? 'border-r' : ''
+                      }`}
                     >
                       <span className="tnum block text-[10px] text-moss">
                         {present}/{total}
@@ -477,12 +484,6 @@ function Cell({
   };
 
   const present = attendance?.present;
-  const attendanceClass =
-    present === true
-      ? 'text-moss'
-      : present === false
-        ? 'text-clay'
-        : 'text-faint';
 
   if (column.attendanceOnly) {
     return (
@@ -490,12 +491,23 @@ function Cell({
         type="button"
         onClick={() => void toggleAttendance()}
         aria-label={`Явка: ${student.name}, ${column.session.date}`}
-        className={`flex h-10 w-full items-center justify-center transition-colors hover:bg-elevated/40 focus-ring ${attendanceClass}`}
+        className="flex h-11 w-full items-center justify-center px-1 transition-colors hover:bg-elevated/40 focus-ring"
       >
-        <Icon
-          name={present === true ? 'check' : present === false ? 'close' : 'clock'}
-          size={14}
-        />
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-medium ${
+            present === true
+              ? 'bg-moss text-surface'
+              : present === false
+                ? 'bg-danger text-surface'
+                : 'border border-dashed border-line-strong text-faint'
+          }`}
+        >
+          <Icon
+            name={present === true ? 'check' : present === false ? 'close' : 'clock'}
+            size={10}
+          />
+          {present === true ? 'был' : present === false ? 'не был' : '—'}
+        </span>
       </button>
     );
   }
@@ -504,17 +516,27 @@ function Cell({
   const bandTone = band ? GRADE_CLASSES[band.tone] : null;
 
   return (
-    <div className="flex h-10 w-full">
+    <div className="flex h-11 w-full">
       <button
         type="button"
         onClick={() => void toggleAttendance()}
         aria-label={`Посещаемость: ${student.name}, ${column.session.date}`}
-        className={`flex w-8 shrink-0 items-center justify-center border-r border-line/70 transition-colors hover:bg-elevated/40 focus-ring ${attendanceClass}`}
+        className="flex w-8 shrink-0 items-center justify-center border-r border-line/60 transition-colors hover:bg-elevated/40 focus-ring"
       >
-        <Icon
-          name={present === true ? 'check' : present === false ? 'close' : 'clock'}
-          size={11}
-        />
+        <span
+          className={`flex h-[18px] w-[18px] items-center justify-center rounded-full ${
+            present === true
+              ? 'bg-moss text-surface'
+              : present === false
+                ? 'bg-danger text-surface'
+                : 'border border-dashed border-line-strong text-faint'
+          }`}
+        >
+          <Icon
+            name={present === true ? 'check' : present === false ? 'close' : 'clock'}
+            size={10}
+          />
+        </span>
       </button>
       <div className="flex min-w-0 flex-1 items-center justify-center">
         <input
@@ -527,12 +549,12 @@ function Cell({
           inputMode="decimal"
           placeholder="—"
           aria-label={`Балл: ${student.name}, ${column.session.date}`}
-          className={`tnum h-9 w-8 border-0 bg-transparent p-0 text-center text-[12px] placeholder:text-faint focus:bg-elevated/70 focus:outline-none ${
+          className={`tnum h-10 w-9 border-0 bg-transparent p-0 text-center text-[12px] placeholder:text-faint focus:bg-elevated/70 focus:outline-none ${
             bandTone ? bandTone.text : 'text-ink'
           }`}
         />
         <span
-          className={`tnum w-2.5 shrink-0 text-[9px] font-semibold ${
+          className={`tnum w-3 shrink-0 text-[9px] font-semibold ${
             bandTone?.text ?? 'text-transparent'
           }`}
         >

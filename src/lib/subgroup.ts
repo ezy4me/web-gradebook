@@ -1,4 +1,9 @@
-/** Цветовые роли подгрупп: 1 — глина, 2 — мох, 3 — сталь, дальше по кругу. */
+/**
+ * Цветовые роли подгрупп.
+ *
+ * Намеренно не красный и не зелёный: эти цвета заняты оценками и явкой,
+ * а подгруппа — это просто идентификатор, а не «хорошо / плохо».
+ */
 export interface SubgroupTone {
   dot: string;
   badge: string;
@@ -10,25 +15,25 @@ export interface SubgroupTone {
 
 const TONES = [
   {
-    dot: 'bg-clay',
-    badge: 'bg-clay-soft text-clay',
-    cell: 'bg-clay-soft',
-    border: 'border-clay',
-    text: 'text-clay',
+    dot: 'bg-sub1',
+    badge: 'bg-sub1-soft text-sub1',
+    cell: 'bg-sub1-soft',
+    border: 'border-sub1',
+    text: 'text-sub1',
   },
   {
-    dot: 'bg-moss',
-    badge: 'bg-moss-soft text-moss',
-    cell: 'bg-moss-soft',
-    border: 'border-moss',
-    text: 'text-moss',
+    dot: 'bg-sub2',
+    badge: 'bg-sub2-soft text-sub2',
+    cell: 'bg-sub2-soft',
+    border: 'border-sub2',
+    text: 'text-sub2',
   },
   {
-    dot: 'bg-steel',
-    badge: 'bg-steel-soft text-steel',
-    cell: 'bg-steel-soft',
-    border: 'border-steel',
-    text: 'text-steel',
+    dot: 'bg-sub3',
+    badge: 'bg-sub3-soft text-sub3',
+    cell: 'bg-sub3-soft',
+    border: 'border-sub3',
+    text: 'text-sub3',
   },
 ] as const;
 
