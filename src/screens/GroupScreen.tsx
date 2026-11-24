@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Page } from '../components/Page';
 import {
@@ -21,8 +21,10 @@ import { useSnapshot } from '../db/hooks';
 import {
   addStudentToGroup,
   createStudent,
+  deleteGroup,
   enrollGroupToSubject,
   removeGroupMember,
+  updateGroup,
 } from '../db/repo';
 import {
   computeGroupStats,
@@ -31,21 +33,30 @@ import {
   groupSubjects,
 } from '../domain/grading';
 import { GRADE_CLASSES, gradeBand } from '../lib/grades';
-import { countLabel } from '../lib/text';
+import { countLabel, subjectInitials } from '../lib/text';
+import { useSettings } from '../lib/settings';
 import type { Snapshot } from '../domain/grading';
 import type { Group, Student } from '../db/types';
 
 export function GroupScreen() {
   const { groupId } = useParams();
   const snapshot = useSnapshot();
+  const settings = useSettings();
   const navigate = useNavigate();
   const toast = useToast();
   const [addingStudents, setAddingStudents] = useState(false);
   const [addingSubject, setAddingSubject] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const group = snapshot?.groups.find((item) => item.id === groupId && !item.deletedAt);
+  useEffect(() => {
+    if (settingsOpen && group) setGroupName(group.name);
+  }, [settingsOpen, group?.id]);
   const members = useMemo(
     () => (snapshot && groupId ? groupStudents(snapshot, groupId) : []),
     [snapshot, groupId],
@@ -97,6 +108,13 @@ export function GroupScreen() {
       )}${average != null ? ` · средний ${formatPercent(average)}` : ''}`}
       back
       backTo="/groups"
+      actions={
+        <IconButton
+          icon="settings"
+          label="Настройки группы"
+          onClick={() => setSettingsOpen(true)}
+        />
+      }
     >
       <div className="flex items-end justify-between border-b border-line pb-4">
         <div>
@@ -147,7 +165,12 @@ export function GroupScreen() {
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-medium text-ink">{subject.name}</span>
+                  <span
+                    title={subject.name}
+                    className="block truncate text-[15px] font-medium text-ink"
+                  >
+                    {settings.shortSubjectNames ? subjectInitials(subject.name) : subject.name}
+                  </span>
                   <span className="mt-0.5 block text-[11.5px] text-faint">
                     {stats.students} студентов · заполнено {formatPercent(stats.completion)}
                   </span>
@@ -289,6 +312,78 @@ export function GroupScreen() {
           setConfirmRemove(false);
           setEditingStudent(null);
           toast('Студент убран из группы');
+        }}
+      />
+
+      <Sheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        title="Настройки группы"
+        description="Название видно во всех предметах этой группы."
+        footer={
+          <Button
+            full
+            size="lg"
+            disabled={busy || !groupName.trim()}
+            onClick={async () => {
+              if (busy) return;
+              const next = groupName.trim();
+              if (!next || next === group.name) {
+                setSettingsOpen(false);
+                return;
+              }
+              setBusy(true);
+              await updateGroup(group.id, next);
+              setBusy(false);
+              setSettingsOpen(false);
+              toast('Название группы обновлено');
+            }}
+          >
+            Сохранить
+          </Button>
+        }
+      >
+        <div className="space-y-5">
+          <Field label="Название" htmlFor="group-settings-name">
+            <Input
+              id="group-settings-name"
+              value={groupName}
+              onChange={(event) => setGroupName(event.target.value)}
+              autoComplete="off"
+            />
+          </Field>
+          <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
+            <p className="text-[13px] font-medium text-ink">Удаление группы</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-faint">
+              Группа, её состав, зачисления и сессии исчезнут из журналов. Студенты и предметы
+              останутся в базе.
+            </p>
+            <button
+              type="button"
+              className="mt-3 text-[12.5px] font-medium text-danger underline-offset-2 hover:underline focus-ring"
+              onClick={() => setConfirmDelete(true)}
+            >
+              Удалить группу
+            </button>
+          </div>
+        </div>
+      </Sheet>
+
+      <ConfirmSheet
+        open={confirmDelete}
+        title="Удалить группу?"
+        description={`«${group.name}» и все её сессии, оценки и посещаемость будут скрыты. Студенты останутся в общей базе.`}
+        confirmLabel={busy ? 'Удаляем…' : 'Удалить группу'}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          if (busy) return;
+          setBusy(true);
+          await deleteGroup(group.id);
+          setBusy(false);
+          setConfirmDelete(false);
+          setSettingsOpen(false);
+          toast('Группа удалена');
+          navigate('/groups');
         }}
       />
     </Page>

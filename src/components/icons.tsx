@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   List,
   Lock,
+  Maximize2,
   MessageSquare,
   Moon,
   MoreHorizontal,
@@ -43,6 +44,7 @@ export type IconName =
   | 'sun'
   | 'moon'
   | 'lock'
+  | 'maximize'
   | 'trash'
   | 'edit'
   | 'search'
@@ -74,6 +76,7 @@ const ICONS: Record<IconName, LucideIcon> = {
   sun: Sun,
   moon: Moon,
   lock: Lock,
+  maximize: Maximize2,
   trash: Trash2,
   edit: Pencil,
   search: Search,

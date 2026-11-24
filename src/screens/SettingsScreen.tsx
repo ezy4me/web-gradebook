@@ -11,6 +11,7 @@ import {
   Segmented,
   Select,
   Sheet,
+  Switch,
   useToast,
 } from '../components/ui';
 import { Icon } from '../components/icons';
@@ -48,6 +49,15 @@ export function SettingsScreen() {
       <p className="mt-2 text-[12px] leading-snug text-faint">
         «Системная» повторяет настройку телефона. Тема применяется до первой отрисовки.
       </p>
+
+      <div className="mt-3 rounded-card border border-line bg-surface px-4">
+        <Switch
+          label="Короткие названия предметов"
+          description="В списках — только первые буквы заглавными: «Веб-разработка» → «ВР»."
+          checked={settings.shortSubjectNames}
+          onChange={(checked) => updateSettings({ shortSubjectNames: checked })}
+        />
+      </div>
 
       <SectionTitle>Доступ</SectionTitle>
       <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
@@ -163,7 +173,7 @@ export function SettingsScreen() {
           <p className="text-[14.5px] font-medium text-ink">web-gradebook</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-dim">
             Офлайн-журнал преподавателя: предметы, группы, занятия, сессии, баллы и посещаемость.
-            Версия 0.8.0.
+            Версия 0.9.0.
           </p>
           <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">
             Данные хранятся на устройстве. Синхронизация и бэкап включаются отдельно. React, Vite,

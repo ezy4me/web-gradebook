@@ -122,6 +122,14 @@ try {
   });
   check('таблица: горизонтальный скролл', tableMetrics.scrollable);
   check('таблица: минимальная ширина балла', tableMetrics.scoreWidth >= 80, `${tableMetrics.scoreWidth}px`);
+  await page.getByRole('button', { name: 'Открыть таблицу на весь экран' }).click();
+  await page.waitForTimeout(400);
+  const fullscreen = page.getByRole('dialog', { name: 'Таблица на весь экран' });
+  check('таблица: полный экран', (await fullscreen.count()) === 1);
+  check('таблица: выбор вида в полном экране', (await fullscreen.getByRole('tab').count()) >= 1);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  check('таблица: выход из полного экрана', (await fullscreen.count()) === 0);
   check('таблица: виды занятий', (await page.getByRole('tab', { name: 'Практики' }).count()) === 1);
   await shot('02b-table');
   await page.getByRole('tab', { name: 'Лекции' }).click();
@@ -208,6 +216,7 @@ try {
 
   await page.goto(`${BASE}#/data`);
   await page.waitForTimeout(700);
+  check('данные: состояние хранилища', (await page.getByText('Хранилище', { exact: true }).count()) >= 1);
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Скачать бэкап JSON' }).click(),
@@ -325,6 +334,33 @@ try {
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   check('таблица на 320 без скролла страницы', overflow <= 0, `overflow=${overflow}`);
+
+  // 12. Удаление группы
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${BASE}#/groups`);
+  await page.waitForTimeout(700);
+  await page.getByRole('button').filter({ hasText: 'ПИ-22' }).first().click();
+  await page.waitForTimeout(600);
+  await page.getByRole('button', { name: 'Настройки группы' }).click();
+  await page.waitForTimeout(400);
+  await page.getByText('Удалить группу', { exact: true }).click();
+  await page.waitForTimeout(400);
+  await page.getByRole('button', { name: 'Удалить группу', exact: true }).last().click();
+  await page.waitForTimeout(1200);
+  check('группа: удаление', (await page.getByText('ПИ-22').count()) === 0);
+
+  // 13. Короткие названия предметов
+  await page.getByRole('link', { name: 'Настройки' }).click();
+  await page.waitForTimeout(500);
+  await page.getByRole('switch', { name: 'Короткие названия предметов' }).click();
+  await page.waitForTimeout(300);
+  await page.getByRole('link', { name: 'Предметы' }).click();
+  await page.waitForTimeout(700);
+  check(
+    'предметы: короткие названия',
+    (await page.getByText('ВР', { exact: true }).count()) >= 1 &&
+      (await page.getByText('БД', { exact: true }).count()) >= 1,
+  );
 } catch (error) {
   failures.push(`исключение: ${error.message}`);
   await shot('FAIL');

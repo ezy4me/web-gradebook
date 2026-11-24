@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { Activity, ActivitySession, ActivityType, Student, Subject } from '../db/types';
 import { setAttendance, setGrade } from '../db/repo';
@@ -18,7 +19,7 @@ import { GRADE_CLASSES, gradeBand, scoreBand } from '../lib/grades';
 import { subgroupTone } from '../lib/subgroup';
 import { countLabel } from '../lib/text';
 import { Icon } from '../components/icons';
-import { EmptyState } from '../components/ui';
+import { EmptyState, IconButton } from '../components/ui';
 
 const TYPE_LABEL: Record<ActivityType, string> = {
   lecture: 'Лекции',
@@ -74,6 +75,7 @@ export function JournalTable({
 }) {
   const navigate = useNavigate();
   const [type, setType] = useState<ActivityType>('lab');
+  const [fullscreen, setFullscreen] = useState(false);
 
   const students = useMemo<StudentRow[]>(() => {
     if (!groupId) return [];
@@ -138,6 +140,20 @@ export function JournalTable({
     }
   }, [tables, type]);
 
+  useEffect(() => {
+    if (!fullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [fullscreen]);
+
   if (!groupId) {
     return (
       <EmptyState
@@ -159,6 +175,7 @@ export function JournalTable({
   }
 
   const current = tables.find((table) => table.type === type) ?? tables[0];
+  const groupName = snapshot.groups.find((group) => group.id === groupId)?.name ?? 'Группа';
   const lecture = current.type === 'lecture';
   const activityWidth = lecture ? 1 : 2;
 
@@ -195,8 +212,75 @@ export function JournalTable({
   const dateRowHeight = 32;
   const dateRowOffset = 36;
 
-  return (
-    <div>
+  const content = (
+    <div
+      className={
+        fullscreen ? 'fade-in fixed inset-0 z-[70] flex h-dvh flex-col overflow-hidden bg-bg' : ''
+      }
+      role={fullscreen ? 'dialog' : undefined}
+      aria-modal={fullscreen ? true : undefined}
+      aria-label={fullscreen ? 'Таблица на весь экран' : undefined}
+    >
+      {fullscreen ? (
+        <header className="safe-top shrink-0 border-b border-line bg-surface">
+          <div className="mx-auto flex w-full max-w-[1500px] items-center gap-1.5 px-2 py-1.5">
+            <IconButton
+              icon="back"
+              label="Свернуть таблицу"
+              onClick={() => setFullscreen(false)}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14.5px] font-medium text-ink">{subject.name}</p>
+              <p className="truncate text-[11.5px] text-faint">
+                {groupName} · {countLabel(current.activities.length, 'занятие', 'занятия', 'занятий')}
+              </p>
+            </div>
+            {typeAverage != null ? (
+              <span className={`tnum shrink-0 text-[13px] font-medium ${typeTone?.text ?? 'text-dim'}`}>
+                {formatPercent(typeAverage)}
+              </span>
+            ) : null}
+            {!lecture && typeBand ? (
+              <span
+                className={`tnum shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${typeTone?.soft} ${typeTone?.text}`}
+              >
+                {typeBand.grade}
+              </span>
+            ) : null}
+          </div>
+          <div
+            role="tablist"
+            aria-label="Вид занятий"
+            className="scroll-x mx-auto flex w-full max-w-[1500px] gap-1.5 overflow-x-auto px-3 pb-2"
+          >
+            {tables.map((table) => {
+              const active = table.type === current.type;
+              return (
+                <button
+                  key={table.type}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setType(table.type)}
+                  className={`h-8 shrink-0 rounded-full border px-2.5 text-[11.5px] transition-colors focus-ring ${
+                    active
+                      ? 'border-ink bg-ink text-surface'
+                      : 'border-line bg-surface text-dim hover:border-line-strong'
+                  }`}
+                >
+                  {TYPE_LABEL[table.type]}
+                  <span className={`tnum ml-1.5 text-[10px] ${active ? 'text-surface/70' : 'text-faint'}`}>
+                    {table.activities.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </header>
+      ) : null}
+
+      {!fullscreen ? (
+        <>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-faint">
         {subgroups.map((subgroup) => {
           const tone = subgroupTone(subgroup.index);
@@ -261,10 +345,26 @@ export function JournalTable({
           ) : null}
         </span>
         <span className="hidden shrink-0 sm:inline">Явка слева, балл справа</span>
-        <span className="shrink-0 sm:hidden">вбок →</span>
+        <button
+          type="button"
+          onClick={() => setFullscreen(true)}
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-[10.5px] text-dim transition-colors hover:border-line-strong hover:text-ink focus-ring"
+          aria-label="Открыть таблицу на весь экран"
+        >
+          <Icon name="maximize" size={12} />
+          Весь экран
+        </button>
       </div>
+        </>
+      ) : null}
 
-      <div className="mt-1.5 max-h-[calc(100dvh-370px)] overflow-auto overscroll-x-contain rounded-card border border-line bg-surface lg:max-h-[calc(100dvh-350px)]">
+      <div
+        className={
+          fullscreen
+            ? 'min-h-0 flex-1 overflow-auto overscroll-contain bg-surface'
+            : 'mt-1.5 max-h-[calc(100dvh-370px)] overflow-auto overscroll-x-contain rounded-card border border-line bg-surface lg:max-h-[calc(100dvh-350px)]'
+        }
+      >
         <table className="w-max min-w-full table-auto border-separate border-spacing-0 text-[12px]">
           <thead>
             <tr>
@@ -515,6 +615,8 @@ export function JournalTable({
       </div>
     </div>
   );
+
+  return fullscreen ? createPortal(content, document.body) : content;
 }
 
 /* ------------------------------ Клетки ------------------------------- */

@@ -11,6 +11,7 @@ function defaults(): AppSettings {
     pinHash: null,
     pinSalt: null,
     autoLockMinutes: 5,
+    shortSubjectNames: false,
     lastSubjectId: null,
     updatedAt: nowIso(),
   };

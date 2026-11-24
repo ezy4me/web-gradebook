@@ -23,7 +23,7 @@ import { subjectOverview } from '../domain/grading';
 import { ACTIVITY_TYPES, ACTIVITY_TYPE_LABEL, type ActivityType, type ScaleKind } from '../db/types';
 import { formatPercent } from '../domain/grading';
 import { updateSettings, useSettings } from '../lib/settings';
-import { countLabel } from '../lib/text';
+import { countLabel, subjectInitials } from '../lib/text';
 import { GRADE_CLASSES, gradeBand } from '../lib/grades';
 
 export function SubjectsScreen() {
@@ -65,6 +65,7 @@ export function SubjectsScreen() {
     const needle = query.trim().toLowerCase();
     return (
       subject.name.toLowerCase().includes(needle) ||
+      subjectInitials(subject.name).toLowerCase().includes(needle) ||
       groupNames.some((name) => name.toLowerCase().includes(needle))
     );
   });
@@ -150,8 +151,13 @@ export function SubjectsScreen() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
-                        <span className="display truncate text-[19px] leading-snug text-ink">
-                          {subject.name}
+                        <span
+                          title={subject.name}
+                          className={`display truncate text-ink ${
+                            settings.shortSubjectNames ? 'text-[26px] leading-none tracking-wide' : 'text-[19px] leading-snug'
+                          }`}
+                        >
+                          {settings.shortSubjectNames ? subjectInitials(subject.name) : subject.name}
                         </span>
                         {subject.archivedAt ? <Badge tone="warn">архив</Badge> : null}
                       </div>

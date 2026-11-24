@@ -15,7 +15,7 @@ import {
   type Subgroup,
 } from './types';
 import { newId, nowIso } from '../lib/date';
-import { markStoreDirty } from '../sync/dirty';
+import { markAllStoresDirty, markStoreDirty } from '../sync/dirty';
 
 const meta = () => ({ createdAt: nowIso(), updatedAt: nowIso(), deletedAt: null });
 
@@ -76,6 +76,7 @@ export async function deleteSubject(id: ID): Promise<void> {
       await db.subgroups.where('subjectId').equals(id).modify(patch);
     },
   );
+  markAllStoresDirty();
 }
 
 /* -------------------------------- Группы -------------------------------- */
@@ -95,6 +96,32 @@ export async function findOrCreateGroup(name: string): Promise<Group> {
 
 export async function updateGroup(id: ID, name: string): Promise<void> {
   await db.groups.update(id, { name: name.trim(), ...touch() });
+}
+
+/**
+ * Удалить группу целиком: состав, зачисления, подгруппы и сессии этой группы.
+ * Студенты и предметы остаются; занятия без сессий можно использовать снова.
+ */
+export async function deleteGroup(id: ID): Promise<void> {
+  const stamp = nowIso();
+  await db.transaction(
+    'rw',
+    [db.groups, db.groupMembers, db.subgroups, db.enrollments, db.sessions, db.grades, db.attendance],
+    async () => {
+      const sessionIds = await db.sessions.where('groupId').equals(id).primaryKeys();
+      const patch = { deletedAt: stamp, updatedAt: stamp };
+      await db.groups.update(id, patch);
+      await db.groupMembers.where('groupId').equals(id).modify(patch);
+      await db.subgroups.where('groupId').equals(id).modify(patch);
+      await db.enrollments.where('groupId').equals(id).modify(patch);
+      await db.sessions.where('groupId').equals(id).modify(patch);
+      if (sessionIds.length) {
+        await db.grades.where('sessionId').anyOf(sessionIds).modify(patch);
+        await db.attendance.where('sessionId').anyOf(sessionIds).modify(patch);
+      }
+    },
+  );
+  markAllStoresDirty();
 }
 
 export async function ensureSubgroups(
@@ -153,6 +180,7 @@ export async function deleteStudent(id: ID): Promise<void> {
       await db.attendance.where('studentId').equals(id).modify({ deletedAt: stamp, updatedAt: stamp });
     },
   );
+  markAllStoresDirty();
 }
 
 /* ------------------------------ Состав групп --------------------------- */
@@ -237,6 +265,7 @@ export async function removeGroupMember(groupId: ID, studentId: ID): Promise<voi
       .filter((enrollment) => enrollment.studentId === studentId)
       .modify({ deletedAt: stamp, updatedAt: stamp });
   });
+  markAllStoresDirty();
 }
 
 /** Зачислить всех участников группы в предмет; вернуть количество зачисленных. */
@@ -396,6 +425,7 @@ export async function deleteActivity(id: ID): Promise<void> {
       }
     }
   });
+  markAllStoresDirty();
 }
 
 /* -------------------------------- Сессии -------------------------------- */
@@ -455,6 +485,7 @@ export async function deleteSession(id: ID): Promise<void> {
     await db.grades.where('sessionId').equals(id).modify({ deletedAt: stamp, updatedAt: stamp });
     await db.attendance.where('sessionId').equals(id).modify({ deletedAt: stamp, updatedAt: stamp });
   });
+  markAllStoresDirty();
 }
 
 /* --------------------------- Оценки и явка ------------------------------ */
@@ -593,4 +624,5 @@ export async function clearSessionMarks(sessionId: ID): Promise<void> {
     await db.grades.where('sessionId').equals(sessionId).modify({ deletedAt: stamp, updatedAt: stamp });
     await db.attendance.where('sessionId').equals(sessionId).modify({ deletedAt: stamp, updatedAt: stamp });
   });
+  markAllStoresDirty();
 }

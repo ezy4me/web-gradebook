@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Page } from '../components/Page';
 import {
   Badge,
@@ -7,6 +7,7 @@ import {
   Field,
   FullPageLoader,
   Input,
+  Progress,
   Row,
   SectionTitle,
   Segmented,
@@ -31,6 +32,12 @@ import { SyncSheet } from '../components/SyncSheet';
 import { DriveSheet } from '../components/DriveSheet';
 import { phaseLabel, useSyncState } from '../sync/state';
 import { driveStatusLabel, useDriveState } from '../drive/state';
+import {
+  formatBytes,
+  getStorageInfo,
+  requestPersistentStorage,
+  type StorageInfo,
+} from '../lib/storage';
 import {
   defaultStartYear,
   importSchedule,
@@ -57,8 +64,14 @@ export function DataScreen() {
   const [exportingXlsx, setExportingXlsx] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
   const [driveOpen, setDriveOpen] = useState(false);
+  const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [storageBusy, setStorageBusy] = useState(false);
   const sync = useSyncState();
   const drive = useDriveState();
+
+  useEffect(() => {
+    void getStorageInfo().then(setStorage);
+  }, []);
   const [confirmWipe, setConfirmWipe] = useState(false);
   const [schedule, setSchedule] = useState<{ text: string; name: string } | null>(null);
   const [scheduleYear, setScheduleYear] = useState(String(defaultStartYear()));
@@ -197,6 +210,59 @@ export function DataScreen() {
         <Count label="сессии" value={counts?.sessions ?? 0} />
         <Count label="оценки" value={counts?.grades ?? 0} />
         <Count label="явки" value={counts?.attendance ?? 0} />
+      </div>
+
+      <SectionTitle>Хранилище</SectionTitle>
+      <div className="rounded-card border border-line bg-surface px-4 py-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[12px] text-faint">Данные приложения на устройстве</p>
+            <p className="tnum mt-1 text-[15px] text-ink">
+              {storage?.supported ? formatBytes(storage.usage) : '—'}
+              {storage?.supported && storage.quota ? (
+                <span className="text-[12px] text-faint"> из {formatBytes(storage.quota)}</span>
+              ) : null}
+            </p>
+          </div>
+          <Badge tone={storage?.persisted ? 'success' : 'neutral'}>
+            {storage?.persisted ? 'защищено' : 'не защищено'}
+          </Badge>
+        </div>
+        <div className="mt-2.5">
+          <Progress
+            value={storage?.quota ? Math.min(100, (storage.usage / storage.quota) * 100) : 0}
+            thin
+          />
+        </div>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-faint">
+          {storage?.supported
+            ? storage.persisted
+              ? 'Браузер не удалит базу при нехватке места. Резервная копия всё равно нужна: IndexedDB привязана к устройству.'
+              : 'Браузер может очистить базу при нехватке места. Включите постоянное хранилище и держите JSON-бэкап.'
+            : 'Браузер не сообщает состояние хранилища. Скачивайте JSON-бэкап перед сменой устройства.'}
+        </p>
+        {storage?.supported && !storage.persisted ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="mt-3"
+            disabled={storageBusy}
+            onClick={async () => {
+              setStorageBusy(true);
+              const granted = await requestPersistentStorage();
+              setStorage(await getStorageInfo());
+              setStorageBusy(false);
+              toast(
+                granted
+                  ? 'Постоянное хранилище включено'
+                  : 'Браузер не разрешил: данные сохранены, но бэкап обязателен',
+                granted ? 'success' : 'danger',
+              );
+            }}
+          >
+            {storageBusy ? 'Запрашиваем…' : 'Защитить от очистки'}
+          </Button>
+        ) : null}
       </div>
 
       <SectionTitle>Перенос данных</SectionTitle>

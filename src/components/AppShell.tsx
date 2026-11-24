@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Icon, type IconName } from './icons';
 
@@ -30,6 +31,10 @@ const TABS: { to: string; label: string; icon: IconName; match: (path: string) =
 export function AppShell() {
   const location = useLocation();
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [location.pathname]);
+
   return (
     <div className="mx-auto flex min-h-full w-full max-w-app flex-col bg-bg">
       <a
@@ -39,7 +44,9 @@ export function AppShell() {
         К содержанию
       </a>
       <main id="main-content" className="pad-above-nav flex-1">
-        <Outlet />
+        <div key={location.pathname} className="page-enter">
+          <Outlet />
+        </div>
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-app border-t border-line bg-surface safe-bottom">
         <div className="grid grid-cols-4">

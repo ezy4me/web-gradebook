@@ -206,7 +206,7 @@ export function SubjectScreen() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-app px-5 pb-6 pt-5 lg:px-8">
+      <div key={tab} className="fade-in mx-auto w-full max-w-app px-5 pb-6 pt-5 lg:px-8">
         {tab === 'journal' ? (
           <JournalTab
             subject={subject}

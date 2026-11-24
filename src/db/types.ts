@@ -159,6 +159,8 @@ export interface AppSettings {
   pinSalt: string | null;
   /** Автоблокировка после простоя, минуты. */
   autoLockMinutes: number;
+  /** Показывать названия предметов инициалами: «Веб-разработка» → «ВР». */
+  shortSubjectNames: boolean;
   lastSubjectId: ID | null;
   updatedAt: string;
 }
@@ -169,6 +171,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pinHash: null,
   pinSalt: null,
   autoLockMinutes: 5,
+  shortSubjectNames: false,
   lastSubjectId: null,
   updatedAt: new Date().toISOString(),
 };
