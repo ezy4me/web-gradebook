@@ -24,7 +24,8 @@ const TABS: { to: string; label: string; icon: IconName; match: (path: string) =
     to: '/settings',
     label: 'Настройки',
     icon: 'settings',
-    match: (path) => path.startsWith('/settings') || path.startsWith('/data'),
+    match: (path) =>
+      path.startsWith('/settings') || path.startsWith('/data') || path.startsWith('/transfer'),
   },
 ];
 

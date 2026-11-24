@@ -362,6 +362,16 @@ try {
     (await page.getByText('ВР', { exact: true }).count()) >= 1 &&
       (await page.getByText('БД', { exact: true }).count()) >= 1,
   );
+
+  // 14. Перенос по QR: входной экран и направления
+  await page.goto(`${BASE}#/transfer`);
+  await page.waitForTimeout(700);
+  check('QR: экран переноса', (await page.getByText('Два устройства, один журнал').count()) === 1);
+  check(
+    'QR: оба направления',
+    (await page.getByRole('button', { name: 'Передать с этого устройства' }).count()) === 1 &&
+      (await page.getByRole('button', { name: 'Принять на это устройство' }).count()) === 1,
+  );
 } catch (error) {
   failures.push(`исключение: ${error.message}`);
   await shot('FAIL');

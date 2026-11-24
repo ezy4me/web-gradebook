@@ -107,6 +107,11 @@ export function SettingsScreen() {
       <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
         <Row label="Экспорт и импорт" hint="Полный бэкап JSON, восстановление, очистка" onClick={() => navigate('/data')} />
         <Row
+          label="Перенос по QR"
+          hint="WebRTC между устройствами без сервера"
+          onClick={() => navigate('/transfer')}
+        />
+        <Row
           label="Google Drive"
           hint={
             drive.configured
@@ -173,7 +178,7 @@ export function SettingsScreen() {
           <p className="text-[14.5px] font-medium text-ink">web-gradebook</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-dim">
             Офлайн-журнал преподавателя: предметы, группы, занятия, сессии, баллы и посещаемость.
-            Версия 0.10.0.
+            Версия 0.11.0.
           </p>
           <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">
             Данные хранятся на устройстве. Синхронизация и бэкап включаются отдельно. React, Vite,

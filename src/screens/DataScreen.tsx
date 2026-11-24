@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Page } from '../components/Page';
 import {
   Badge,
@@ -70,6 +71,7 @@ import { countLabel } from '../lib/text';
 export function DataScreen() {
   const snapshot = useSnapshot();
   const toast = useToast();
+  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<{ backup: BackupFile; name: string; summary: BackupSummary } | null>(null);
   const [mode, setMode] = useState<ImportMode>('merge');
@@ -430,6 +432,15 @@ export function DataScreen() {
           }}
         >
           {exportingXlsx ? 'Собираем книгу…' : 'Скачать журнал Excel'}
+        </Button>
+        <Button
+          icon="qr"
+          variant="secondary"
+          full
+          size="lg"
+          onClick={() => navigate('/transfer')}
+        >
+          Передать по QR между устройствами
         </Button>
         <Button
           icon="download"

@@ -16,6 +16,7 @@ import { StatsScreen } from './screens/StatsScreen';
 import { DataScreen } from './screens/DataScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { AuthScreen } from './screens/AuthScreen';
+import { TransferScreen } from './screens/TransferScreen';
 
 export default function App() {
   const settings = useSettings();
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/data" element={<DataScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
             <Route path="/auth" element={<AuthScreen />} />
+            <Route path="/transfer" element={<TransferScreen />} />
             <Route path="/subject/:subjectId" element={<SubjectScreen />} />
             <Route path="/subject/:subjectId/student/:studentId" element={<StudentScreen />} />
             <Route path="/activity/:activityId" element={<ActivityScreen />} />

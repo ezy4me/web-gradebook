@@ -21,6 +21,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  QrCode,
   Search,
   Settings,
   Sun,
@@ -45,6 +46,7 @@ export type IconName =
   | 'moon'
   | 'lock'
   | 'maximize'
+  | 'qr'
   | 'trash'
   | 'edit'
   | 'search'
@@ -77,6 +79,7 @@ const ICONS: Record<IconName, LucideIcon> = {
   moon: Moon,
   lock: Lock,
   maximize: Maximize2,
+  qr: QrCode,
   trash: Trash2,
   edit: Pencil,
   search: Search,
